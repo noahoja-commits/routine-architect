@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Routine Architect - Science-Backed Routine Designer</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div>
+        <div class="brand">
+          <div class="brand-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </div>
+          <span class="brand-name">ROUTINE ARCHITECT</span>
+        </div>
+        
+        <nav>
+          <ul class="nav-menu">
+            <li class="nav-item">
+              <a class="nav-link active" data-target="dashboard">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                <span>Discover Library</span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" data-target="generator">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
+                <span>Smart Generator</span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" data-target="player">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <span>Routine Player</span>
+                <span id="player-active-dot" style="display:none; width:8px; height:8px; background:var(--accent); border-radius:50%; margin-left:auto; box-shadow:0 0 8px var(--accent);"></span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" data-target="creator">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <span>Custom Builder</span>
+              </a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link" data-target="tracker">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                <span>Habit Tracker</span>
+              </a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+      
+      <div class="sidebar-footer">
+        <!-- Streak Display -->
+        <div class="streak-counter-mini">
+          <div class="streak-flame">🔥</div>
+          <div class="streak-info">
+            <span class="streak-value" id="sidebar-streak-value">0 Days</span>
+            <span class="streak-label">Active Routine Streak</span>
+          </div>
+        </div>
+        
+        <!-- Theme Toggle -->
+        <div class="theme-toggle">
+          <button class="theme-toggle-btn active" id="theme-dark-btn">Dark</button>
+          <button class="theme-toggle-btn" id="theme-light-btn">Light</button>
+        </div>
+      </div>
+    </aside>
+    
+    <!-- Main Content Panel -->
+    <main class="main-content">
+      
+      <!-- Panel 1: Dashboard / Library -->
+      <section class="view-panel active" id="panel-dashboard">
+        <div class="panel-header">
+          <h1 class="panel-title">Discover Master Routines</h1>
+          <p class="panel-subtitle">Select a pre-built daily flow designed and backed by clinical research and cognitive performance studies.</p>
+        </div>
+        
+        <div class="library-grid" id="prebuilt-library-grid">
+          <!-- Populated dynamically by app.js -->
+        </div>
+      </section>
+      
+      <!-- Panel 2: Smart Generator -->
+      <section class="view-panel" id="panel-generator">
+        <div class="panel-header">
+          <h1 class="panel-title">Smart Science Generator</h1>
+          <p class="panel-subtitle">Enter any routine goal or schedule constraints, and our engine will construct a custom schedule anchored in peer-reviewed facts.</p>
+        </div>
+        
+        <div class="generator-box">
+          <form class="prompt-form" id="generator-form">
+            <div class="textarea-container">
+              <textarea 
+                class="prompt-textarea" 
+                id="generator-prompt" 
+                placeholder="Examples: 'morning routine to maximize coding focus', 'evening skin and wind-down', 'quick 45-min fat loss workout', 'guitar study session for beginner'..."
+                required
+              ></textarea>
+            </div>
+            
+            <div class="prompt-options">
+              <div class="option-group">
+                <label class="option-label" for="generator-duration">Total Available Time</label>
+                <select class="option-select" id="generator-duration">
+                  <option value="15">15 Minutes (Micro Sprint)</option>
+                  <option value="30">30 Minutes (Quick Fit)</option>
+                  <option value="60" selected>60 Minutes (Standard Block)</option>
+                  <option value="90">90 Minutes (Ultradian Cycle)</option>
+                  <option value="120">2 Hours (Deep Work Block)</option>
+                  <option value="180">3 Hours (Extended Sprint)</option>
+                </select>
+              </div>
+              <div class="option-group">
+                <label class="option-label" for="generator-difficulty">Intensity / Tone</label>
+                <select class="option-select" id="generator-difficulty">
+                  <option value="Easy">Easy (Calm / Beginner)</option>
+                  <option value="Medium" selected>Medium (Standard / Balanced)</option>
+                  <option value="Hard">Hard (High Intensity / Athlete)</option>
+                </select>
+              </div>
+            </div>
+            
+            <button type="submit" class="generate-btn" id="generate-submit-btn">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 22 22 22 12 2"></polygon></svg>
+              <span>Construct Routine</span>
+            </button>
+          </form>
+          
+          <div class="suggestion-chips">
+            <span class="suggestion-chip">Morning routine for coding focus</span>
+            <span class="suggestion-chip">Anxiety-relief sleep prep</span>
+            <span class="suggestion-chip">Learn Rust programming in 1 hour</span>
+            <span class="suggestion-chip">45-minute HIIT workout</span>
+            <span class="suggestion-chip">Kitchen meal prep and clean</span>
+            <span class="suggestion-chip">Adulting: Weekly budget review</span>
+          </div>
+        </div>
+        
+        <!-- Loading spinner placeholder -->
+        <div id="generator-loading" style="display:none; text-align:center; padding:3rem 0;">
+          <div class="loader"></div>
+          <p style="margin-top:1rem; color:var(--text-secondary); font-family:var(--font-display); font-weight:500;">Analyzing inputs & assembling evidence-based flow...</p>
+        </div>
+        
+        <!-- Generated Result View -->
+        <div id="generator-result" style="display:none;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem;">
+            <div>
+              <h2 id="result-title" style="font-family:var(--font-display); font-weight:800; font-size:1.75rem;">Custom Routine</h2>
+              <p id="result-desc" style="color:var(--text-secondary); font-size:0.95rem; max-width:600px; margin-top:0.25rem;"></p>
+            </div>
+            <div style="display:flex; gap:0.5rem;">
+              <button class="btn-primary" id="result-start-btn">Start Playing</button>
+              <button class="btn-secondary" id="result-print-btn">Print PDF</button>
+            </div>
+          </div>
+          
+          <div class="routine-container">
+            <!-- Steps (Left) -->
+            <div class="routine-steps-list" id="result-steps-container">
+              <!-- Populated dynamically -->
+            </div>
+            
+            <!-- Side Panel (Right) -->
+            <div class="fact-panel" id="result-fact-panel">
+              <div class="fact-header">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                <span class="fact-header-title">Clinical Rationale</span>
+              </div>
+              <h3 class="fact-title-box" id="result-fact-title">Select any step to view the science</h3>
+              <p class="fact-body" id="result-fact-text">Scientific citations and mechanisms backing this activity will be presented here to justify why it works.</p>
+              <div class="fact-source" id="result-fact-source">Clinical Research Studies</div>
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      <!-- Panel 3: Routine Player -->
+      <section class="view-panel" id="panel-player">
+        <div class="panel-header">
+          <h1 class="panel-title">Routine Player</h1>
+          <p class="panel-subtitle">A live dashboard directing your attention step-by-step. Focus entirely on execution while we manage timings.</p>
+        </div>
+        
+        <div id="player-empty-state" style="text-align:center; padding:5rem 0;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" style="margin-bottom:1.5rem;"><circle cx="12" cy="12" r="10"></circle><polygon points="10 8 16 12 10 16 10 8"></polygon></svg>
+          <h2 style="font-family:var(--font-display); font-weight:700; margin-bottom:0.5rem;">No Active Routine</h2>
+          <p style="color:var(--text-secondary); max-width:400px; margin:0 auto 1.5rem auto;">Select a pre-built routine from the library or create a custom one, then click "Start" to load the active player.</p>
+          <button class="btn-primary" id="player-goto-library-btn">Browse Library</button>
+        </div>
+        
+        <div id="player-active-state" style="display:none;">
+          <div class="routine-player-grid">
+            
+            <!-- Player Controller Card -->
+            <div class="player-main">
+              <div class="player-header-info">
+                <div class="player-current-routine" id="player-routine-title">Morning Routine</div>
+                <div class="player-current-step" id="player-step-title">Circadian Rehydration</div>
+                <p id="player-step-desc" style="color:var(--text-secondary); margin-top:0.75rem; font-size:0.95rem; max-width:500px; line-height:1.5;"></p>
+              </div>
+              
+              <!-- Timer Clock -->
+              <div class="timer-dial-container">
+                <svg class="timer-svg">
+                  <circle class="timer-circle-bg" cx="100" cy="100" r="90"></circle>
+                  <circle class="timer-circle-progress" id="timer-progress-ring" cx="100" cy="100" r="90"></circle>
+                </svg>
+                <div class="timer-text-overlay">
+                  <span class="timer-time" id="player-timer-time">00:00</span>
+                  <span class="timer-label" id="player-timer-status">Remaining</span>
+                </div>
+              </div>
+              
+              <!-- Action Buttons -->
+              <div class="player-controls">
+                <button class="btn-icon" id="player-prev-btn" title="Previous Step">
+                  <svg viewBox="0 0 24 24"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
+                </button>
+                <button class="btn-play-pause" id="player-play-btn" title="Play/Pause">
+                  <svg id="play-icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                  <svg id="pause-icon" viewBox="0 0 24 24" style="display:none;"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                </button>
+                <button class="btn-icon" id="player-next-btn" title="Skip Step">
+                  <svg viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
+                </button>
+              </div>
+              
+              <!-- Cancel Button -->
+              <button class="btn-secondary" id="player-cancel-btn" style="margin-top:2rem; padding:0.5rem 1rem; font-size:0.85rem;">Reset Player</button>
+            </div>
+            
+            <!-- Side Metadata and Facts -->
+            <div>
+              <div class="fact-panel" style="position:static; margin-bottom:1.5rem;">
+                <div class="fact-header">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                  <span class="fact-header-title">The Science Rationale</span>
+                </div>
+                <h3 class="fact-title-box" id="player-fact-title">Hydration Physiology</h3>
+                <p class="fact-body" id="player-fact-text">Fact details will load here dynamically during active playback.</p>
+                <div class="fact-source" id="player-fact-source">Study reference</div>
+              </div>
+              
+              <div class="stats-bars">
+                <div style="font-family:var(--font-display); font-weight:700; font-size:1.1rem; border-bottom:1px solid var(--border-color); padding-bottom:0.5rem; margin-bottom:0.5rem;">Routine Analytics</div>
+                <div class="stat-row">
+                  <div class="stat-label-row">
+                    <span>Science Validity Rating</span>
+                    <span id="player-stat-science-val">0%</span>
+                  </div>
+                  <div class="stat-progress-bg">
+                    <div class="stat-progress-bar" id="player-stat-science-bar" style="background-color:var(--accent);"></div>
+                  </div>
+                </div>
+                <div class="stat-row">
+                  <div class="stat-label-row">
+                    <span>Cognitive Focus Demand</span>
+                    <span id="player-stat-focus-val">0%</span>
+                  </div>
+                  <div class="stat-progress-bg">
+                    <div class="stat-progress-bar" id="player-stat-focus-bar" style="background-color:var(--primary);"></div>
+                  </div>
+                </div>
+                <div class="stat-row">
+                  <div class="stat-label-row">
+                    <span>Physical Intensity Level</span>
+                    <span id="player-stat-phys-val">0%</span>
+                  </div>
+                  <div class="stat-progress-bg">
+                    <div class="stat-progress-bar" id="player-stat-phys-bar" style="background-color:var(--secondary);"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+          </div>
+        </div>
+      </section>
+      
+      <!-- Panel 4: Custom Routine Creator -->
+      <section class="view-panel" id="panel-creator">
+        <div class="panel-header">
+          <h1 class="panel-title">Custom Routine Builder</h1>
+          <p class="panel-subtitle">Design your own routines by adding tasks, setting timings, and mapping them with peer-reviewed facts from our science vault.</p>
+        </div>
+        
+        <div class="creator-container">
+          <!-- Form Section -->
+          <div class="form-card">
+            <h2 style="font-family:var(--font-display); font-weight:700; font-size:1.25rem; margin-bottom:1.5rem; border-bottom:1px solid var(--border-color); padding-bottom:0.5rem;">Routine Parameters</h2>
+            <form id="creator-routine-form" style="display:flex; flex-direction:column; gap:1.25rem;">
+              <div class="option-group">
+                <label class="option-label" for="creator-title">Routine Name</label>
+                <input class="form-input" type="text" id="creator-title" placeholder="e.g. My Perfect Study Sprint" required>
+              </div>
+              <div class="option-group">
+                <label class="option-label" for="creator-desc">Short Description</label>
+                <input class="form-input" type="text" id="creator-desc" placeholder="e.g. Science-backed routine to learn languages." required>
+              </div>
+              <div class="prompt-options">
+                <div class="option-group">
+                  <label class="option-label" for="creator-category">Category</label>
+                  <select class="option-select" id="creator-category">
+                    <option value="Morning & Wakeup">Morning & Wakeup</option>
+                    <option value="Productivity & Tech">Productivity & Tech</option>
+                    <option value="Health & Sleep">Health & Sleep</option>
+                    <option value="Fitness & Wellness">Fitness & Wellness</option>
+                    <option value="General Productivity">General Productivity</option>
+                  </select>
+                </div>
+                <div class="option-group">
+                  <label class="option-label" for="creator-difficulty">Target Difficulty</label>
+                  <select class="option-select" id="creator-difficulty">
+                    <option value="Easy">Easy</option>
+                    <option value="Medium" selected>Medium</option>
+                    <option value="Hard">Hard</option>
+                  </select>
+                </div>
+              </div>
+              
+              <!-- Step Addition sub-form -->
+              <h2 style="font-family:var(--font-display); font-weight:700; font-size:1.15rem; margin-top:1rem; border-top:1px solid var(--border-color); padding-top:1.25rem; margin-bottom:1rem;">Add Step</h2>
+              <div class="option-group">
+                <label class="option-label" for="creator-step-title">Step Name</label>
+                <input class="form-input" type="text" id="creator-step-title" placeholder="e.g. Rehydrate and Breathe">
+              </div>
+              <div class="prompt-options">
+                <div class="option-group">
+                  <label class="option-label" for="creator-step-duration">Duration (Minutes)</label>
+                  <input class="form-input" type="number" id="creator-step-duration" min="1" max="180" value="10">
+                </div>
+                <div class="option-group">
+                  <label class="option-label" for="creator-step-fact">Scientific Fact Link</label>
+                  <select class="option-select" id="creator-step-fact">
+                    <!-- Populated dynamically by app.js -->
+                  </select>
+                </div>
+              </div>
+              <div class="option-group">
+                <label class="option-label" for="creator-step-desc">Action Steps & Details</label>
+                <textarea class="form-input" id="creator-step-desc" style="height:70px; resize:none;" placeholder="Detail what you will do during this step."></textarea>
+              </div>
+              
+              <button type="button" class="btn-secondary" id="creator-add-step-btn" style="padding:0.6rem 1rem;">+ Add Step to Timeline</button>
+              
+              <button type="submit" class="btn-primary" style="margin-top:1rem; background:linear-gradient(135deg, var(--primary), var(--secondary)); padding:1rem 2rem;">Save Complete Routine</button>
+            </form>
+          </div>
+          
+          <!-- Live Preview Section -->
+          <div>
+            <h2 style="font-family:var(--font-display); font-weight:700; font-size:1.25rem; margin-bottom:1.5rem;">Timeline Preview</h2>
+            <div id="creator-empty-preview" style="text-align:center; padding:3rem 1rem; border:2px dashed var(--border-color); border-radius:var(--radius-lg); color:var(--text-muted);">
+              Add steps using the form on the left to build out your routine's schedule here.
+            </div>
+            <div class="creator-step-list-builder" id="creator-steps-container" style="display:none;">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      <!-- Panel 5: Habit Tracker -->
+      <section class="view-panel" id="panel-tracker">
+        <div class="panel-header">
+          <h1 class="panel-title">Habit Tracker & Analytics</h1>
+          <p class="panel-subtitle">Track your streaks, completion metrics, and review historical logs to ensure your biological habits stick.</p>
+        </div>
+        
+        <!-- Top Stats Row -->
+        <div class="tracker-stats-grid">
+          <div class="tracker-stat-card">
+            <div class="tracker-stat-val" id="stats-total-completions">0</div>
+            <div class="tracker-stat-lbl">Completed Routines</div>
+          </div>
+          <div class="tracker-stat-card">
+            <div class="tracker-stat-val" id="stats-current-streak">0 Days</div>
+            <div class="tracker-stat-lbl">Current Streak</div>
+          </div>
+          <div class="tracker-stat-card">
+            <div class="tracker-stat-val" id="stats-longest-streak">0 Days</div>
+            <div class="tracker-stat-lbl">Longest Streak</div>
+          </div>
+          <div class="tracker-stat-card">
+            <div class="tracker-stat-val" id="stats-avg-score">0%</div>
+            <div class="tracker-stat-lbl">Avg Scientific Score</div>
+          </div>
+        </div>
+        
+        <div class="grid-cols-2">
+          <!-- Calendar Card -->
+          <div class="calendar-wrapper">
+            <div class="calendar-header">
+              <span class="calendar-month" id="calendar-month-name">June 2026</span>
+              <div style="font-size:0.8rem; color:var(--text-secondary); background:var(--bg-surface-elevated); padding:0.25rem 0.5rem; border-radius:var(--radius-sm);">Interactive Tracker</div>
+            </div>
+            
+            <div class="calendar-grid" id="calendar-days-grid">
+              <!-- Calendar Labels -->
+              <span class="calendar-day-label">Sun</span>
+              <span class="calendar-day-label">Mon</span>
+              <span class="calendar-day-label">Tue</span>
+              <span class="calendar-day-label">Wed</span>
+              <span class="calendar-day-label">Thu</span>
+              <span class="calendar-day-label">Fri</span>
+              <span class="calendar-day-label">Sat</span>
+              
+              <!-- Populated dynamically by app.js -->
+            </div>
+          </div>
+          
+          <!-- History Log Card -->
+          <div class="card" style="display:flex; flex-direction:column; overflow:hidden;">
+            <h2 style="font-family:var(--font-display); font-weight:700; font-size:1.25rem; margin-bottom:1rem; border-bottom:1px solid var(--border-color); padding-bottom:0.5rem;">Completion History</h2>
+            <div style="overflow-y:auto; flex-grow:1; max-height:300px;" id="tracker-history-list">
+              <p style="color:var(--text-muted); text-align:center; padding-top:3rem;">No routines completed yet. Load a routine in the Player and run it to record history.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+      
+    </main>
+  </div>
+  
+  <!-- App Controller scripts -->
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1133,3 +1133,155 @@ body {
     box-shadow: none !important;
   }
 }
+
+/* Mobile Responsive Overrides */
+@media (max-width: 768px) {
+  .app-container {
+    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* Convert Sidebar to Bottom Navigation Bar */
+  .sidebar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: calc(65px + env(safe-area-inset-bottom));
+    border-right: none;
+    border-top: 1px solid var(--border-color);
+    padding: 0.5rem 1rem calc(0.5rem + env(safe-area-inset-bottom)) 1rem;
+    z-index: 100;
+    flex-direction: row;
+    justify-content: space-around;
+    align-items: center;
+    background-color: var(--glass-bg);
+    backdrop-filter: blur(var(--glass-blur));
+    box-shadow: 0 -4px 10px rgba(0, 0, 0, 0.2);
+  }
+  
+  .brand, .sidebar-footer {
+    display: none !important;
+  }
+  
+  .nav-menu {
+    flex-direction: row;
+    width: 100%;
+    justify-content: space-around;
+    align-items: center;
+    gap: 0;
+    margin: 0;
+  }
+  
+  .nav-item {
+    width: auto;
+  }
+  
+  .nav-link {
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    font-size: 0.7rem;
+    background: none !important;
+    border: 1px solid transparent !important;
+  }
+  
+  .nav-link svg {
+    width: 22px;
+    height: 22px;
+  }
+  
+  .nav-link.active {
+    color: var(--primary);
+    background: transparent !important;
+    border-color: transparent !important;
+  }
+
+  /* Adjust Main Content Area */
+  .main-content {
+    padding: calc(1.5rem + env(safe-area-inset-top)) 1.25rem calc(80px + env(safe-area-inset-bottom)) 1.25rem;
+    height: auto;
+    overflow-y: visible;
+  }
+  
+  .panel-title {
+    font-size: 1.75rem;
+  }
+  
+  /* Column collapses */
+  .grid-cols-2, .grid-cols-3 {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  /* Routine container flow */
+  .routine-container {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  
+  .fact-panel {
+    position: static;
+    margin-top: 1rem;
+  }
+  
+  /* Active Player Grid */
+  .routine-player-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  
+  .player-main {
+    padding: 1.5rem 1.25rem;
+    min-height: auto;
+  }
+  
+  .player-current-step {
+    font-size: 1.4rem;
+  }
+  
+  .timer-dial-container {
+    width: 180px;
+    height: 180px;
+  }
+  
+  /* Habit Tracker Grid */
+  .tracker-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+  }
+  
+  .tracker-stat-card {
+    padding: 1rem;
+  }
+  
+  .tracker-stat-val {
+    font-size: 1.5rem;
+  }
+  
+  /* Creator view */
+  .creator-container {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+  
+  .form-card {
+    padding: 1.25rem;
+  }
+  
+  /* General mobile touch friendly adjustments */
+  .card, .step-card, .btn-primary, .btn-secondary, .form-input, .option-select {
+    cursor: default;
+  }
+  
+  .card:active, .step-card:active, .btn-primary:active, .btn-secondary:active {
+    transform: scale(0.98);
+  }
+  
+  .prompt-options {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}

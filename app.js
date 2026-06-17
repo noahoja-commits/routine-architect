@@ -14,7 +14,9 @@ let currentStepIndex = 0;
 let timerInterval = null;
 let timerSecondsRemaining = 0;
 let timerDurationTotal = 0;
+let timerEndTimestamp = 0; // Fixed: Tracks exact timestamp to prevent mobile background drift
 let isPlaying = false;
+let audioContext = null; // Fixed: Primed AudioContext for iOS/Chrome chimes
 
 // Custom Builder State
 let creatorSteps = [];
@@ -27,6 +29,9 @@ const streakValues = document.querySelectorAll('#sidebar-streak-value');
 const themeDarkBtn = document.getElementById('theme-dark-btn');
 const themeLightBtn = document.getElementById('theme-light-btn');
 
+// Voice Coach Toggle
+const voiceToggle = document.getElementById('player-voice-toggle');
+
 // Initialize Application
 document.addEventListener('DOMContentLoaded', () => {
   setupNavigation();
@@ -36,8 +41,22 @@ document.addEventListener('DOMContentLoaded', () => {
   setupPlayer();
   setupCreator();
   setupTracker();
+  setupFactExplorer();
   updateStreakDisplay();
+  
+  // Prime audio context on any first body tap to comply with browser restrictions
+  document.body.addEventListener('click', initAudioContext, { once: true });
 });
+
+// Helper to initialize and resume Web Audio Context
+function initAudioContext() {
+  if (!audioContext) {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioContext.state === 'suspended') {
+    audioContext.resume().then(() => console.log('AudioContext successfully unlocked.'));
+  }
+}
 
 // 1. Navigation Controller
 function setupNavigation() {
@@ -141,6 +160,7 @@ function renderLibrary() {
 
     // Add Launch Button Event
     card.querySelector('.card-btn').addEventListener('click', () => {
+      initAudioContext();
       loadRoutineIntoPlayer(routine);
       switchPanel('player');
     });
@@ -178,30 +198,33 @@ function setupGenerator() {
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    const promptVal = promptTextarea.value;
+    const promptVal = promptTextarea.value.trim();
+    if (!promptVal) return;
     
     // Show Loading Spinner
     generatorResult.style.display = 'none';
     generatorLoading.style.display = 'block';
 
-    // Premium delay to simulate deep analysis
     setTimeout(() => {
       generatorLoading.style.display = 'none';
       
-      // Call generator function
-      currentGeneratedRoutine = generateRoutine(promptVal);
-      
-      // Update inputs with extracted properties if needed
-      document.getElementById('generator-duration').value = currentGeneratedRoutine.duration;
-      document.getElementById('generator-difficulty').value = currentGeneratedRoutine.difficulty;
+      try {
+        currentGeneratedRoutine = generateRoutine(promptVal);
+        
+        // Update inputs with extracted properties if needed
+        document.getElementById('generator-duration').value = currentGeneratedRoutine.duration;
+        document.getElementById('generator-difficulty').value = currentGeneratedRoutine.difficulty;
 
-      // Render Results
-      resultTitle.textContent = currentGeneratedRoutine.title;
-      resultDesc.textContent = currentGeneratedRoutine.description;
-      
-      renderSteps(currentGeneratedRoutine.steps);
-      
-      generatorResult.style.display = 'block';
+        // Render Results
+        resultTitle.textContent = currentGeneratedRoutine.title;
+        resultDesc.textContent = currentGeneratedRoutine.description;
+        
+        renderSteps(currentGeneratedRoutine.steps);
+        generatorResult.style.display = 'block';
+      } catch (err) {
+        console.error(err);
+        alert("Failed to compile routine. Please try a simpler phrasing.");
+      }
     }, 1200);
   });
 
@@ -249,11 +272,17 @@ function setupGenerator() {
       factTitle.textContent = fact.title;
       factText.textContent = fact.text;
       factSource.textContent = `Source: ${fact.source}`;
+    } else {
+      // Fallback
+      factTitle.textContent = "Clinical Justification";
+      factText.textContent = "This custom activity block is arranged to balance active cognitive effort with neural recovery phases, preventing system fatigue.";
+      factSource.textContent = "Cognitive Ergonomics Research";
     }
   }
 
   // Start Playing Generated Routine
   startBtn.addEventListener('click', () => {
+    initAudioContext();
     if (currentGeneratedRoutine) {
       loadRoutineIntoPlayer(currentGeneratedRoutine);
       switchPanel('player');
@@ -300,12 +329,29 @@ function setupPlayer() {
 
   gotoLibBtn.addEventListener('click', () => switchPanel('dashboard'));
 
-  playBtn.addEventListener('click', togglePlayPause);
-  prevBtn.addEventListener('click', () => moveStep(-1));
-  nextBtn.addEventListener('click', () => moveStep(1));
+  playBtn.addEventListener('click', () => {
+    initAudioContext();
+    togglePlayPause();
+  });
+  
+  prevBtn.addEventListener('click', () => {
+    initAudioContext();
+    moveStep(-1);
+  });
+  
+  nextBtn.addEventListener('click', () => {
+    initAudioContext();
+    moveStep(1);
+  });
+  
   cancelBtn.addEventListener('click', resetPlayer);
 
   window.loadRoutineIntoPlayer = function(routine) {
+    if (!routine.steps || routine.steps.length === 0) {
+      alert("This routine has no steps to play.");
+      return;
+    }
+    
     activeRoutine = routine;
     currentStepIndex = 0;
     isPlaying = false;
@@ -346,6 +392,9 @@ function setupPlayer() {
     updateTimerText();
     updateProgressRing();
     loadFactForPlayer(step.factKey);
+    
+    // TTS voice announcement
+    speakStep(step);
   }
 
   function loadFactForPlayer(factKey) {
@@ -354,6 +403,10 @@ function setupPlayer() {
       factTitle.textContent = fact.title;
       factText.textContent = fact.text;
       factSource.textContent = `Source: ${fact.source}`;
+    } else {
+      factTitle.textContent = "Active Performance Phase";
+      factText.textContent = "Executing planned activities using custom time blocks. Sustained attention maintains synaptic firing and reinforces mental focus pathways.";
+      factSource.textContent = "Somatic Habituation Models";
     }
   }
 
@@ -364,7 +417,6 @@ function setupPlayer() {
   }
 
   function updateProgressRing() {
-    // 2 * PI * r (r=90) => circumference = 565.48
     const circumference = 565.48;
     const progress = timerSecondsRemaining / timerDurationTotal;
     const offset = circumference * (1 - progress);
@@ -384,7 +436,11 @@ function setupPlayer() {
     } else {
       // Play
       isPlaying = true;
-      timerInterval = setInterval(tickTimer, 1000);
+      
+      // Fixed: Anchor timer to exact end-timestamp to prevent background sleeping drift
+      timerEndTimestamp = Date.now() + (timerSecondsRemaining * 1000);
+      
+      timerInterval = setInterval(tickTimer, 200); // Poll rapidly to keep display synced
       playIcon.style.display = 'none';
       pauseIcon.style.display = 'block';
       timerStatus.textContent = 'Remaining';
@@ -392,23 +448,29 @@ function setupPlayer() {
   }
 
   function tickTimer() {
+    // Calculate exact remaining time against the absolute end-timestamp
+    const remaining = Math.max(0, Math.round((timerEndTimestamp - Date.now()) / 1000));
+    timerSecondsRemaining = remaining;
+    
+    updateTimerText();
+    updateProgressRing();
+
     if (timerSecondsRemaining <= 0) {
       clearInterval(timerInterval);
       playChime();
       
       // Auto move to next step or finish
       if (currentStepIndex + 1 < activeRoutine.steps.length) {
-        loadStep(currentStepIndex + 1);
-        if (isPlaying) {
-          timerInterval = setInterval(tickTimer, 1000);
-        }
+        setTimeout(() => {
+          loadStep(currentStepIndex + 1);
+          if (isPlaying) {
+            timerEndTimestamp = Date.now() + (timerSecondsRemaining * 1000);
+            timerInterval = setInterval(tickTimer, 200);
+          }
+        }, 800); // minor buffer for audio chime playout
       } else {
-        completeActiveRoutine();
+        setTimeout(completeActiveRoutine, 800);
       }
-    } else {
-      timerSecondsRemaining--;
-      updateTimerText();
-      updateProgressRing();
     }
   }
 
@@ -418,7 +480,8 @@ function setupPlayer() {
     if (targetIdx >= 0 && targetIdx < activeRoutine.steps.length) {
       loadStep(targetIdx);
       if (isPlaying) {
-        timerInterval = setInterval(tickTimer, 1000);
+        timerEndTimestamp = Date.now() + (timerSecondsRemaining * 1000);
+        timerInterval = setInterval(tickTimer, 200);
       }
     } else if (targetIdx >= activeRoutine.steps.length) {
       completeActiveRoutine();
@@ -433,7 +496,7 @@ function setupPlayer() {
     // Log routine completion
     logRoutineCompletion(activeRoutine);
     
-    alert(`Congratulations! You have completed the routine: "${activeRoutine.title}"! Your habit history and streaks are updated.`);
+    alert(`Congratulations! You have completed: "${activeRoutine.title}"! Your habit history and streaks are updated.`);
     
     resetPlayer();
     switchPanel('tracker');
@@ -451,40 +514,71 @@ function setupPlayer() {
     emptyState.style.display = 'block';
     activeState.style.display = 'none';
     document.getElementById('player-active-dot').style.display = 'none';
+    
+    // Stop any reading voice
+    window.speechSynthesis.cancel();
   }
 
-  // Synthesize Chime Sound via Web Audio API
+  // Synthesize Chime Sound via Web Audio API using the global AudioContext
   function playChime() {
+    initAudioContext();
+    if (!audioContext) return;
+    
     try {
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const now = audioContext.currentTime;
       
       // First tone (G5)
-      const osc1 = audioCtx.createOscillator();
-      const gain1 = audioCtx.createGain();
+      const osc1 = audioContext.createOscillator();
+      const gain1 = audioContext.createGain();
       osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(783.99, audioCtx.currentTime); // G5
-      gain1.gain.setValueAtTime(0.1, audioCtx.currentTime);
-      gain1.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+      osc1.frequency.setValueAtTime(783.99, now); // G5
+      gain1.gain.setValueAtTime(0.1, now);
+      gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
       osc1.connect(gain1);
-      gain1.connect(audioCtx.destination);
+      gain1.connect(audioContext.destination);
       osc1.start();
-      osc1.stop(audioCtx.currentTime + 0.3);
+      osc1.stop(now + 0.3);
       
       // Second tone (C6)
       setTimeout(() => {
-        const osc2 = audioCtx.createOscillator();
-        const gain2 = audioCtx.createGain();
+        if (!audioContext || audioContext.state === 'suspended') return;
+        const now2 = audioContext.currentTime;
+        const osc2 = audioContext.createOscillator();
+        const gain2 = audioContext.createGain();
         osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(1046.50, audioCtx.currentTime); // C6
-        gain2.gain.setValueAtTime(0.1, audioCtx.currentTime);
-        gain2.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+        osc2.frequency.setValueAtTime(1046.50, now2); // C6
+        gain2.gain.setValueAtTime(0.1, now2);
+        gain2.gain.exponentialRampToValueAtTime(0.01, now2 + 0.4);
         osc2.connect(gain2);
-        gain2.connect(audioCtx.destination);
+        gain2.connect(audioContext.destination);
         osc2.start();
-        osc2.stop(audioCtx.currentTime + 0.4);
+        osc2.stop(now2 + 0.4);
       }, 150);
     } catch (err) {
-      console.warn("Audio Context blocked or not supported on this browser.", err);
+      console.warn("Chime playback error:", err);
+    }
+  }
+
+  // Text-To-Speech step announcer
+  function speakStep(step) {
+    if (!voiceToggle.checked) return;
+    
+    try {
+      window.speechSynthesis.cancel(); // kill any active speech first
+      
+      const announcement = `Starting: ${step.title}. ${step.desc}`;
+      const utterance = new SpeechSynthesisUtterance(announcement);
+      utterance.rate = 0.95;
+      utterance.pitch = 1.0;
+      
+      // Try to bind an English voice if cached
+      const voices = window.speechSynthesis.getVoices();
+      const bestVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural')));
+      if (bestVoice) utterance.voice = bestVoice;
+      
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.warn("Speech Synthesis failed to run:", err);
     }
   }
 }
@@ -492,12 +586,12 @@ function setupPlayer() {
 // 6. Habit Tracker & Analytics Controller
 function setupTracker() {
   updateTrackerUI();
+  setupBackupRestore();
 }
 
 function logRoutineCompletion(routine) {
   const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
   
-  // Save completion record
   const record = {
     id: routine.id,
     title: routine.title,
@@ -509,20 +603,16 @@ function logRoutineCompletion(routine) {
   completions.push(record);
   localStorage.setItem('routine_completions', JSON.stringify(completions));
   
-  // Calculate streaks
   calculateStreaks(todayStr);
-  
   updateTrackerUI();
   updateStreakDisplay();
 }
 
 function calculateStreaks(todayStr) {
   if (lastCompletionDate === todayStr) {
-    // Already logged completion today, streak remains same
     return;
   }
 
-  // Calculate day difference
   if (lastCompletionDate) {
     const lastDate = new Date(lastCompletionDate);
     const currentDate = new Date(todayStr);
@@ -530,18 +620,14 @@ function calculateStreaks(todayStr) {
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
     if (diffDays === 1) {
-      // Consecutive day
       userStreak++;
     } else if (diffDays > 1) {
-      // Streak broken
       userStreak = 1;
     }
   } else {
-    // First completion ever
     userStreak = 1;
   }
   
-  // Record longest streak
   if (userStreak > userLongestStreak) {
     userLongestStreak = userStreak;
   }
@@ -566,12 +652,10 @@ function updateTrackerUI() {
   const avgScoreEl = document.getElementById('stats-avg-score');
   const historyList = document.getElementById('tracker-history-list');
   
-  // Set simple values
   totalCompletedEl.textContent = completions.length;
   currentStreakEl.textContent = `${userStreak} Days`;
   longestStreakEl.textContent = `${userLongestStreak} Days`;
   
-  // Calculate average scientific validity score
   if (completions.length > 0) {
     const totalScore = completions.reduce((acc, curr) => acc + curr.score, 0);
     avgScoreEl.textContent = `${Math.round(totalScore / completions.length)}%`;
@@ -584,7 +668,6 @@ function updateTrackerUI() {
   if (completions.length === 0) {
     historyList.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding-top:3rem;">No routines completed yet. Load a routine in the Player and run it to record history.</p>';
   } else {
-    // Show newest first
     const sortedCompletions = [...completions].sort((a,b) => b.timestamp - a.timestamp);
     sortedCompletions.forEach(item => {
       const logDiv = document.createElement('div');
@@ -604,61 +687,28 @@ function updateTrackerUI() {
     });
   }
 
-  // Render Calendar Grid for June 2026
+  // Render Calendar and Compliance charts
   renderCalendarGridJune2026();
+  renderWeeklyComplianceChart();
 }
 
-function renderCalendarGridJune2026() {
-  const gridContainer = document.getElementById('calendar-days-grid');
-  
-  // Preserve first row of weekday headers (Sun, Mon, Tue...)
-  const headerLabels = Array.from(gridContainer.children).slice(0, 7);
-  gridContainer.innerHTML = '';
-  headerLabels.forEach(hl => gridContainer.appendChild(hl));
-  
-  // June 2026 starts on Monday (index 1).
-  // Days in month: 30
-  
-  // Add blank/empty days before Monday
-  for (let i = 0; i < 1; i++) {
-    const emptyDay = document.createElement('div');
-    emptyDay.className = 'calendar-day inactive';
-    gridContainer.appendChild(emptyDay);
-  }
-  
-  // Render days
-  const completedDates = completions.map(c => c.date);
-  
-  for (let dayNum = 1; dayNum <= 30; dayNum++) {
-    const dayStr = `2026-06-${dayNum.toString().padStart(2, '0')}`;
-    const isCompleted = completedDates.includes(dayStr);
-    
-    const dayDiv = document.createElement('div');
-    dayDiv.className = `calendar-day ${isCompleted ? 'completed' : ''}`;
-    dayDiv.style.cursor = 'pointer';
-    dayDiv.dataset.date = dayStr;
-    
-    dayDiv.innerHTML = `
-      <span>${dayNum}</span>
-      ${isCompleted ? '<div class="calendar-day-dot"></div>' : ''}
-    `;
-    
-    // Interactive toggling on calendar days
-    dayDiv.addEventListener('click', () => {
-      toggleCompletionOnDate(dayStr);
-    });
-    
-    gridContainer.appendChild(dayDiv);
-  }
-}
-
+// Fixed: Prevents future date completion logging
 function toggleCompletionOnDate(dateStr) {
+  const selectedDate = new Date(dateStr + "T00:00:00");
+  const today = new Date();
+  today.setHours(23, 59, 59, 999); // Set to end of today
+  
+  if (selectedDate > today) {
+    alert("Focus Error: You cannot record routine completions for future dates.");
+    return;
+  }
+
   const existingIndex = completions.findIndex(c => c.date === dateStr);
   if (existingIndex > -1) {
     // Remove completion
     completions.splice(existingIndex, 1);
   } else {
-    // Add dummy completion for manual override
+    // Add manual log
     completions.push({
       id: "manual_log",
       title: "Manual Activity Log",
@@ -669,10 +719,7 @@ function toggleCompletionOnDate(dateStr) {
   }
   
   localStorage.setItem('routine_completions', JSON.stringify(completions));
-  
-  // Re-adjust streaks based on actual history logs
   recalculateAllStreaks();
-  
   updateTrackerUI();
   updateStreakDisplay();
 }
@@ -709,7 +756,6 @@ function recalculateAllStreaks() {
   const todayStr = new Date().toISOString().split('T')[0];
   const lastLogged = sortedDates[sortedDates.length - 1];
   
-  // If the last logged date is older than yesterday, the active streak resets to 0
   const lastDate = new Date(lastLogged);
   const today = new Date(todayStr);
   const diffFromToday = Math.ceil((today - lastDate) / (1000 * 60 * 60 * 24));
@@ -728,6 +774,87 @@ function recalculateAllStreaks() {
   localStorage.setItem('last_completion_date', lastCompletionDate);
 }
 
+function renderCalendarGridJune2026() {
+  const gridContainer = document.getElementById('calendar-days-grid');
+  const headerLabels = Array.from(gridContainer.children).slice(0, 7);
+  gridContainer.innerHTML = '';
+  headerLabels.forEach(hl => gridContainer.appendChild(hl));
+  
+  // June 2026 starts on Monday (index 1). Days: 30
+  for (let i = 0; i < 1; i++) {
+    const emptyDay = document.createElement('div');
+    emptyDay.className = 'calendar-day inactive';
+    gridContainer.appendChild(emptyDay);
+  }
+  
+  const completedDates = completions.map(c => c.date);
+  
+  for (let dayNum = 1; dayNum <= 30; dayNum++) {
+    const dayStr = `2026-06-${dayNum.toString().padStart(2, '0')}`;
+    const isCompleted = completedDates.includes(dayStr);
+    
+    const dayDiv = document.createElement('div');
+    dayDiv.className = `calendar-day ${isCompleted ? 'completed' : ''}`;
+    dayDiv.style.cursor = 'pointer';
+    dayDiv.dataset.date = dayStr;
+    
+    dayDiv.innerHTML = `
+      <span>${dayNum}</span>
+      ${isCompleted ? '<div class="calendar-day-dot"></div>' : ''}
+    `;
+    
+    dayDiv.addEventListener('click', () => {
+      toggleCompletionOnDate(dayStr);
+    });
+    
+    gridContainer.appendChild(dayDiv);
+  }
+}
+
+// Renders the 7-Day compliance trends via dynamic SVG vector bars
+function renderWeeklyComplianceChart() {
+  const container = document.getElementById('weekly-compliance-chart-container');
+  if (!container) return;
+
+  const stats = [];
+  const today = new Date();
+  
+  // Build last 7 days list
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(today.getDate() - i);
+    const dateStr = d.toISOString().split('T')[0];
+    const count = completions.filter(c => c.date === dateStr).length;
+    const label = d.toLocaleDateString('en-US', { weekday: 'short' });
+    stats.push({ count, label });
+  }
+
+  const maxVal = Math.max(...stats.map(s => s.count), 2); // default scale top is 2
+  
+  let svg = `<svg viewBox="0 0 500 130" width="100%" height="100%">
+    <!-- Gridlines -->
+    <line class="chart-grid-line" x1="30" y1="20" x2="480" y2="20"></line>
+    <line class="chart-grid-line" x1="30" y1="60" x2="480" y2="60"></line>
+    <line class="chart-grid-line" x1="30" y1="100" x2="480" y2="100"></line>
+    <line class="chart-axis-line" x1="30" y1="100" x2="480" y2="100"></line>
+  `;
+
+  stats.forEach((item, idx) => {
+    const x = 50 + idx * 60;
+    const barHeight = (item.count / maxVal) * 75; // Max height inside SVG box is 75px
+    const y = 100 - barHeight;
+
+    svg += `
+      <rect class="chart-bar" x="${x}" y="${y}" width="26" height="${barHeight}" rx="4"></rect>
+      <text class="chart-value-text" x="${x + 13}" y="${y - 6}">${item.count}</text>
+      <text class="chart-text" x="${x + 13}" y="118" text-anchor="middle">${item.label}</text>
+    `;
+  });
+
+  svg += `</svg>`;
+  container.innerHTML = svg;
+}
+
 // 7. Custom Routine Creator Controller
 function setupCreator() {
   const form = document.getElementById('creator-routine-form');
@@ -736,7 +863,6 @@ function setupCreator() {
   const stepsContainer = document.getElementById('creator-steps-container');
   const emptyPreview = document.getElementById('creator-empty-preview');
 
-  // Populate scientific fact options in selector
   factSelect.innerHTML = '';
   Object.keys(facts).forEach(key => {
     const opt = document.createElement('option');
@@ -760,6 +886,10 @@ function setupCreator() {
       alert("Please enter a step title.");
       return;
     }
+    if (sDur <= 0 || isNaN(sDur)) {
+      alert("Please enter a valid positive duration.");
+      return;
+    }
 
     const step = {
       title: sTitle,
@@ -771,7 +901,6 @@ function setupCreator() {
 
     creatorSteps.push(step);
     
-    // Clear inputs
     titleInput.value = '';
     durInput.value = '10';
     descInput.value = '';
@@ -803,18 +932,16 @@ function setupCreator() {
       row.innerHTML = `
         <div class="builder-step-details">
           <div class="builder-step-title">${idx + 1}. ${step.title} (${step.duration} mins)</div>
-          <div class="builder-step-meta">Timing: ${step.time} | Fact: <strong>${facts[step.factKey].title}</strong></div>
+          <div class="builder-step-meta">Timing: ${step.time} | Fact: <strong>${facts[step.factKey] ? facts[step.factKey].title : 'Default Performance'}</strong></div>
         </div>
         <button class="btn-icon" style="width:32px; height:32px; color:var(--danger); border-color:transparent;" title="Remove Step">
           <svg viewBox="0 0 24 24" style="width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:2.5;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       `;
 
-      // Handle step removal
       row.querySelector('button').addEventListener('click', () => {
         creatorSteps.splice(idx, 1);
         
-        // Recalculate relative timing labels
         let sum = 0;
         creatorSteps.forEach(s => {
           s.time = sum === 0 ? "Start" : `+${sum} mins`;
@@ -828,7 +955,6 @@ function setupCreator() {
     });
   }
 
-  // Handle entire custom routine submission
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     
@@ -838,11 +964,10 @@ function setupCreator() {
     const rDiff = document.getElementById('creator-difficulty').value;
     
     if (creatorSteps.length === 0) {
-      alert("Please add at least one step to build a routine.");
+      alert("Validation Error: Please add at least one step to build a routine.");
       return;
     }
 
-    // Calculate details
     const totalDuration = creatorSteps.reduce((acc, curr) => acc + curr.duration, 0);
     const scientificScore = Math.min(100, 80 + (creatorSteps.length * 3));
     
@@ -865,17 +990,150 @@ function setupCreator() {
     customRoutines.push(customRoutine);
     localStorage.setItem('custom_routines', JSON.stringify(customRoutines));
     
-    // Reset form and steps preview
     form.reset();
     creatorSteps = [];
     renderCreatorSteps();
-    
-    // Refresh library grid page content
     renderLibrary();
     
     alert(`Success! Your custom routine "${rTitle}" has been saved to the library.`);
-    
-    // Go back to dashboard to see the new custom routine card
     switchPanel('dashboard');
   });
+}
+
+// 8. Data Vault Backup & Restore Handler
+function setupBackupRestore() {
+  const backupBtn = document.getElementById('tracker-backup-btn');
+  const restoreBtn = document.getElementById('tracker-restore-btn');
+  const restoreInput = document.getElementById('tracker-restore-input');
+
+  backupBtn.addEventListener('click', () => {
+    const backupData = {
+      completions,
+      customRoutines,
+      userStreak,
+      userLongestStreak,
+      lastCompletionDate
+    };
+
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `routine_architect_backup_${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  });
+
+  restoreBtn.addEventListener('click', () => {
+    restoreInput.click();
+  });
+
+  restoreInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = JSON.parse(evt.target.result);
+        
+        // Strict structure validation
+        if (data && Array.isArray(data.completions) && Array.isArray(data.customRoutines)) {
+          localStorage.setItem('routine_completions', JSON.stringify(data.completions));
+          localStorage.setItem('custom_routines', JSON.stringify(data.customRoutines));
+          localStorage.setItem('user_streak', (data.userStreak || 0).toString());
+          localStorage.setItem('user_longest_streak', (data.userLongestStreak || 0).toString());
+          localStorage.setItem('last_completion_date', data.lastCompletionDate || "");
+
+          completions = data.completions;
+          customRoutines = data.customRoutines;
+          userStreak = parseInt(data.userStreak) || 0;
+          userLongestStreak = parseInt(data.userLongestStreak) || 0;
+          lastCompletionDate = data.lastCompletionDate || "";
+
+          renderLibrary();
+          updateTrackerUI();
+          updateStreakDisplay();
+
+          alert("Vault restored successfully! Data updated.");
+        } else {
+          alert("Restore Failed: Invalid backup format. Missing core dataset arrays.");
+        }
+      } catch (err) {
+        alert("Restore Failed: Error parsing file. Ensure it is a valid JSON file.");
+      }
+    };
+    reader.readAsText(file);
+    restoreInput.value = ''; // clear input
+  });
+}
+
+// 9. Science Vault Explorer Modal
+function setupFactExplorer() {
+  const openBtn = document.getElementById('open-fact-explorer-btn');
+  const modal = document.getElementById('fact-explorer-modal');
+  const closeBtn = document.getElementById('fact-explorer-close-btn');
+  const searchInput = document.getElementById('fact-explorer-search');
+  const listContainer = document.getElementById('fact-explorer-list');
+
+  openBtn.addEventListener('click', () => {
+    modal.style.display = 'flex';
+    // Trigger transition opacity
+    setTimeout(() => {
+      modal.classList.add('active');
+    }, 10);
+    renderExplorerList("");
+  });
+
+  closeBtn.addEventListener('click', closeModal);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeModal();
+  });
+
+  searchInput.addEventListener('input', (e) => {
+    renderExplorerList(e.target.value.toLowerCase().trim());
+  });
+
+  function closeModal() {
+    modal.classList.remove('active');
+    setTimeout(() => {
+      modal.style.display = 'none';
+    }, 300);
+    searchInput.value = '';
+  }
+
+  function renderExplorerList(query) {
+    listContainer.innerHTML = '';
+    
+    Object.keys(facts).forEach(key => {
+      const fact = facts[key];
+      const match = !query || 
+                    fact.title.toLowerCase().includes(query) || 
+                    fact.text.toLowerCase().includes(query) ||
+                    fact.category.toLowerCase().includes(query) ||
+                    fact.source.toLowerCase().includes(query);
+      
+      if (match) {
+        const factCard = document.createElement('div');
+        factCard.className = 'fact-explorer-card';
+        factCard.innerHTML = `
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+            <span class="card-badge" style="background:var(--accent-glow); color:var(--accent); font-size:0.65rem;">${fact.category}</span>
+            <span style="font-family:var(--font-mono); font-size:0.65rem; color:var(--text-muted); font-weight:600;">Key: ${key}</span>
+          </div>
+          <h4 style="font-family:var(--font-display); font-weight:700; font-size:1rem; margin-bottom:0.4rem; color:var(--text-primary);">${fact.title}</h4>
+          <p style="font-size:0.85rem; color:var(--text-secondary); line-height:1.5; margin-bottom:0.75rem;">${fact.text}</p>
+          <div style="font-family:var(--font-mono); font-size:0.7rem; color:var(--text-muted);">Source: ${fact.source}</div>
+        `;
+        listContainer.appendChild(factCard);
+      }
+    });
+
+    if (listContainer.children.length === 0) {
+      listContainer.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:2rem 0;">No matching facts found in the science vault.</p>';
+    }
+  }
 }

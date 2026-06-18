@@ -14,26 +14,27 @@ let currentStepIndex = 0;
 let timerInterval = null;
 let timerSecondsRemaining = 0;
 let timerDurationTotal = 0;
-let timerEndTimestamp = 0; // Fixed: Tracks exact timestamp to prevent mobile background drift
+let timerEndTimestamp = 0;
 let isPlaying = false;
-let audioContext = null; // Fixed: Primed AudioContext for iOS/Chrome chimes
+let audioContext = null;
 
 // Custom Builder State
 let creatorSteps = [];
 
-// DOM Elements
-const navLinks = document.querySelectorAll('.nav-link');
-const panels = document.querySelectorAll('.view-panel');
-const prebuiltGrid = document.getElementById('prebuilt-library-grid');
-const streakValues = document.querySelectorAll('#sidebar-streak-value');
-const themeDarkBtn = document.getElementById('theme-dark-btn');
-const themeLightBtn = document.getElementById('theme-light-btn');
-
-// Voice Coach Toggle
-const voiceToggle = document.getElementById('player-voice-toggle');
+// DOM Elements (Selected in init() once DOM is ready)
+let navLinks, panels, prebuiltGrid, streakValues, themeDarkBtn, themeLightBtn, voiceToggle;
 
 // Initialize Application
-document.addEventListener('DOMContentLoaded', () => {
+function init() {
+  // Select DOM elements
+  navLinks = document.querySelectorAll('.nav-link');
+  panels = document.querySelectorAll('.view-panel');
+  prebuiltGrid = document.getElementById('prebuilt-library-grid');
+  streakValues = document.querySelectorAll('#sidebar-streak-value');
+  themeDarkBtn = document.getElementById('theme-dark-btn');
+  themeLightBtn = document.getElementById('theme-light-btn');
+  voiceToggle = document.getElementById('player-voice-toggle');
+  
   setupNavigation();
   setupTheme();
   renderLibrary();
@@ -46,15 +47,26 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Prime audio context on any first body tap to comply with browser restrictions
   document.body.addEventListener('click', initAudioContext, { once: true });
-});
+}
 
-// Helper to initialize and resume Web Audio Context
+// Bulletproof DOM Loading State Check
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+
+// Helper to initialize and resume Web Audio Context safely
 function initAudioContext() {
-  if (!audioContext) {
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  }
-  if (audioContext.state === 'suspended') {
-    audioContext.resume().then(() => console.log('AudioContext successfully unlocked.'));
+  try {
+    if (!audioContext) {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioContext && audioContext.state === 'suspended') {
+      audioContext.resume();
+    }
+  } catch (err) {
+    console.warn('Audio Context blocked or not supported on this browser.', err);
   }
 }
 
@@ -70,7 +82,6 @@ function setupNavigation() {
 }
 
 function switchPanel(panelId) {
-  // Update nav links active state
   navLinks.forEach(link => {
     if (link.dataset.target === panelId) {
       link.classList.add('active');
@@ -79,7 +90,6 @@ function switchPanel(panelId) {
     }
   });
 
-  // Update panels display
   panels.forEach(panel => {
     if (panel.id === `panel-${panelId}`) {
       panel.classList.add('active');
@@ -120,15 +130,12 @@ function setupTheme() {
 // 3. Discover Library Panel
 function renderLibrary() {
   prebuiltGrid.innerHTML = '';
-  
-  // Combine prebuilt and custom routines
   const allRoutines = [...prebuiltRoutines, ...customRoutines];
 
   allRoutines.forEach(routine => {
     const card = document.createElement('div');
     card.className = 'card';
     
-    // Choose appropriate SVG icon based on routine icon string
     let svgIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>';
     if (routine.icon === 'sunrise') {
       svgIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 18a5 5 0 0 0-10 0M12 2v7M4.22 10.22l1.42 1.42M1M12 12h-3m13 0h-3M18.36 10.22l-1.42 1.42"></svg>';
@@ -158,7 +165,6 @@ function renderLibrary() {
       </div>
     `;
 
-    // Add Launch Button Event
     card.querySelector('.card-btn').addEventListener('click', () => {
       initAudioContext();
       loadRoutineIntoPlayer(routine);
@@ -181,14 +187,12 @@ function setupGenerator() {
   const startBtn = document.getElementById('result-start-btn');
   const printBtn = document.getElementById('result-print-btn');
   
-  // Side fact panel in generator
   const factTitle = document.getElementById('result-fact-title');
   const factText = document.getElementById('result-fact-text');
   const factSource = document.getElementById('result-fact-source');
 
   let currentGeneratedRoutine = null;
 
-  // Suggestion Chips Click
   document.querySelectorAll('.suggestion-chip').forEach(chip => {
     chip.addEventListener('click', () => {
       promptTextarea.value = chip.textContent;
@@ -201,7 +205,6 @@ function setupGenerator() {
     const promptVal = promptTextarea.value.trim();
     if (!promptVal) return;
     
-    // Show Loading Spinner
     generatorResult.style.display = 'none';
     generatorLoading.style.display = 'block';
 
@@ -211,11 +214,9 @@ function setupGenerator() {
       try {
         currentGeneratedRoutine = generateRoutine(promptVal);
         
-        // Update inputs with extracted properties if needed
         document.getElementById('generator-duration').value = currentGeneratedRoutine.duration;
         document.getElementById('generator-difficulty').value = currentGeneratedRoutine.difficulty;
 
-        // Render Results
         resultTitle.textContent = currentGeneratedRoutine.title;
         resultDesc.textContent = currentGeneratedRoutine.description;
         
@@ -228,7 +229,6 @@ function setupGenerator() {
     }, 1200);
   });
 
-  // Render list of steps in generator panel
   function renderSteps(steps) {
     resultStepsContainer.innerHTML = '';
     
@@ -250,7 +250,6 @@ function setupGenerator() {
         </div>
       `;
 
-      // Select step details
       stepCard.addEventListener('click', () => {
         document.querySelectorAll('.step-card').forEach(c => c.classList.remove('active'));
         stepCard.classList.add('active');
@@ -260,7 +259,6 @@ function setupGenerator() {
       resultStepsContainer.appendChild(stepCard);
     });
 
-    // Auto load first step's fact
     if (steps.length > 0) {
       loadFactToSidePanel(steps[0].factKey);
     }
@@ -273,14 +271,12 @@ function setupGenerator() {
       factText.textContent = fact.text;
       factSource.textContent = `Source: ${fact.source}`;
     } else {
-      // Fallback
       factTitle.textContent = "Clinical Justification";
       factText.textContent = "This custom activity block is arranged to balance active cognitive effort with neural recovery phases, preventing system fatigue.";
       factSource.textContent = "Cognitive Ergonomics Research";
     }
   }
 
-  // Start Playing Generated Routine
   startBtn.addEventListener('click', () => {
     initAudioContext();
     if (currentGeneratedRoutine) {
@@ -289,45 +285,17 @@ function setupGenerator() {
     }
   });
 
-  // Print PDF Layout
   printBtn.addEventListener('click', () => {
     window.print();
   });
 }
 
-// 5. Active Routine Player Panel
+// 5. Active Routine Player Controller
 function setupPlayer() {
-  const emptyState = document.getElementById('player-empty-state');
-  const activeState = document.getElementById('player-active-state');
-  const gotoLibBtn = document.getElementById('player-goto-library-btn');
-  
-  const routineTitle = document.getElementById('player-routine-title');
-  const stepTitle = document.getElementById('player-step-title');
-  const stepDesc = document.getElementById('player-step-desc');
-  const timerTime = document.getElementById('player-timer-time');
-  const timerStatus = document.getElementById('player-timer-status');
-  const progressRing = document.getElementById('timer-progress-ring');
-  
   const prevBtn = document.getElementById('player-prev-btn');
   const playBtn = document.getElementById('player-play-btn');
   const nextBtn = document.getElementById('player-next-btn');
   const cancelBtn = document.getElementById('player-cancel-btn');
-  
-  const playIcon = document.getElementById('play-icon');
-  const pauseIcon = document.getElementById('pause-icon');
-  
-  const factTitle = document.getElementById('player-fact-title');
-  const factText = document.getElementById('player-fact-text');
-  const factSource = document.getElementById('player-fact-source');
-  
-  const statScienceVal = document.getElementById('player-stat-science-val');
-  const statScienceBar = document.getElementById('player-stat-science-bar');
-  const statFocusVal = document.getElementById('player-stat-focus-val');
-  const statFocusBar = document.getElementById('player-stat-focus-bar');
-  const statPhysVal = document.getElementById('player-stat-phys-val');
-  const statPhysBar = document.getElementById('player-stat-phys-bar');
-
-  gotoLibBtn.addEventListener('click', () => switchPanel('dashboard'));
 
   playBtn.addEventListener('click', () => {
     initAudioContext();
@@ -345,241 +313,238 @@ function setupPlayer() {
   });
   
   cancelBtn.addEventListener('click', resetPlayer);
+}
 
-  window.loadRoutineIntoPlayer = function(routine) {
-    if (!routine.steps || routine.steps.length === 0) {
-      alert("This routine has no steps to play.");
-      return;
-    }
-    
-    activeRoutine = routine;
-    currentStepIndex = 0;
+// Module-level Player operations (Prevents ReferenceError on event triggers)
+function loadRoutineIntoPlayer(routine) {
+  if (!routine.steps || routine.steps.length === 0) {
+    alert("This routine has no steps to play.");
+    return;
+  }
+  
+  activeRoutine = routine;
+  currentStepIndex = 0;
+  isPlaying = false;
+  
+  if (timerInterval) clearInterval(timerInterval);
+  
+  const emptyState = document.getElementById('player-empty-state');
+  const activeState = document.getElementById('player-active-state');
+  const statScienceVal = document.getElementById('player-stat-science-val');
+  const statScienceBar = document.getElementById('player-stat-science-bar');
+  const statFocusVal = document.getElementById('player-stat-focus-val');
+  const statFocusBar = document.getElementById('player-stat-focus-bar');
+  const statPhysVal = document.getElementById('player-stat-phys-val');
+  const statPhysBar = document.getElementById('player-stat-phys-bar');
+
+  emptyState.style.display = 'none';
+  activeState.style.display = 'block';
+  document.getElementById('player-active-dot').style.display = 'block';
+  
+  statScienceVal.textContent = `${routine.stats.scientificScore}%`;
+  statScienceBar.style.width = `${routine.stats.scientificScore}%`;
+  statFocusVal.textContent = `${routine.stats.focusRequired}%`;
+  statFocusBar.style.width = `${routine.stats.focusRequired}%`;
+  statPhysVal.textContent = `${routine.stats.physicalIntensity}%`;
+  statPhysBar.style.width = `${routine.stats.physicalIntensity}%`;
+
+  loadStep(0);
+}
+
+function loadStep(idx) {
+  if (!activeRoutine || idx < 0 || idx >= activeRoutine.steps.length) return;
+  
+  currentStepIndex = idx;
+  const step = activeRoutine.steps[currentStepIndex];
+  
+  document.getElementById('player-routine-title').textContent = activeRoutine.title;
+  document.getElementById('player-step-title').textContent = step.title;
+  document.getElementById('player-step-desc').textContent = step.desc;
+  
+  timerDurationTotal = step.duration * 60;
+  timerSecondsRemaining = timerDurationTotal;
+  
+  updateTimerText();
+  updateProgressRing();
+  loadFactForPlayer(step.factKey);
+  
+  speakStep(step);
+}
+
+function loadFactForPlayer(factKey) {
+  const factTitle = document.getElementById('player-fact-title');
+  const factText = document.getElementById('player-fact-text');
+  const factSource = document.getElementById('player-fact-source');
+
+  const fact = facts[factKey];
+  if (fact) {
+    factTitle.textContent = fact.title;
+    factText.textContent = fact.text;
+    factSource.textContent = `Source: ${fact.source}`;
+  } else {
+    factTitle.textContent = "Active Performance Phase";
+    factText.textContent = "Executing planned activities using custom time blocks. Sustained attention maintains synaptic firing and reinforces mental focus pathways.";
+    factSource.textContent = "Somatic Habituation Models";
+  }
+}
+
+function updateTimerText() {
+  const mins = Math.floor(timerSecondsRemaining / 60);
+  const secs = timerSecondsRemaining % 60;
+  document.getElementById('player-timer-time').textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+function updateProgressRing() {
+  const progressRing = document.getElementById('timer-progress-ring');
+  const circumference = 565.48;
+  const progress = timerSecondsRemaining / timerDurationTotal;
+  const offset = circumference * (1 - progress);
+  progressRing.style.strokeDashoffset = offset;
+}
+
+function togglePlayPause() {
+  const playIcon = document.getElementById('play-icon');
+  const pauseIcon = document.getElementById('pause-icon');
+  const timerStatus = document.getElementById('player-timer-status');
+
+  if (isPlaying) {
     isPlaying = false;
-    
-    // Clear existing intervals
-    if (timerInterval) clearInterval(timerInterval);
-    
-    // Show active state
-    emptyState.style.display = 'none';
-    activeState.style.display = 'block';
-    document.getElementById('player-active-dot').style.display = 'block';
-    
-    // Load analytical bar metrics
-    statScienceVal.textContent = `${routine.stats.scientificScore}%`;
-    statScienceBar.style.width = `${routine.stats.scientificScore}%`;
-    statFocusVal.textContent = `${routine.stats.focusRequired}%`;
-    statFocusBar.style.width = `${routine.stats.focusRequired}%`;
-    statPhysVal.textContent = `${routine.stats.physicalIntensity}%`;
-    statPhysBar.style.width = `${routine.stats.physicalIntensity}%`;
-
-    loadStep(0);
-  };
-
-  function loadStep(idx) {
-    if (!activeRoutine || idx < 0 || idx >= activeRoutine.steps.length) return;
-    
-    currentStepIndex = idx;
-    const step = activeRoutine.steps[currentStepIndex];
-    
-    routineTitle.textContent = activeRoutine.title;
-    stepTitle.textContent = step.title;
-    stepDesc.textContent = step.desc;
-    
-    // Setup durations
-    timerDurationTotal = step.duration * 60; // in seconds
-    timerSecondsRemaining = timerDurationTotal;
-    
-    updateTimerText();
-    updateProgressRing();
-    loadFactForPlayer(step.factKey);
-    
-    // TTS voice announcement
-    speakStep(step);
-  }
-
-  function loadFactForPlayer(factKey) {
-    const fact = facts[factKey];
-    if (fact) {
-      factTitle.textContent = fact.title;
-      factText.textContent = fact.text;
-      factSource.textContent = `Source: ${fact.source}`;
-    } else {
-      factTitle.textContent = "Active Performance Phase";
-      factText.textContent = "Executing planned activities using custom time blocks. Sustained attention maintains synaptic firing and reinforces mental focus pathways.";
-      factSource.textContent = "Somatic Habituation Models";
-    }
-  }
-
-  function updateTimerText() {
-    const mins = Math.floor(timerSecondsRemaining / 60);
-    const secs = timerSecondsRemaining % 60;
-    timerTime.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  }
-
-  function updateProgressRing() {
-    const circumference = 565.48;
-    const progress = timerSecondsRemaining / timerDurationTotal;
-    const offset = circumference * (1 - progress);
-    progressRing.style.strokeDashoffset = offset;
-  }
-
-  function togglePlayPause() {
-    if (!activeRoutine) return;
-
-    if (isPlaying) {
-      // Pause
-      isPlaying = false;
-      clearInterval(timerInterval);
-      playIcon.style.display = 'block';
-      pauseIcon.style.display = 'none';
-      timerStatus.textContent = 'Paused';
-    } else {
-      // Play
-      isPlaying = true;
-      
-      // Fixed: Anchor timer to exact end-timestamp to prevent background sleeping drift
-      timerEndTimestamp = Date.now() + (timerSecondsRemaining * 1000);
-      
-      timerInterval = setInterval(tickTimer, 200); // Poll rapidly to keep display synced
-      playIcon.style.display = 'none';
-      pauseIcon.style.display = 'block';
-      timerStatus.textContent = 'Remaining';
-    }
-  }
-
-  function tickTimer() {
-    // Calculate exact remaining time against the absolute end-timestamp
-    const remaining = Math.max(0, Math.round((timerEndTimestamp - Date.now()) / 1000));
-    timerSecondsRemaining = remaining;
-    
-    updateTimerText();
-    updateProgressRing();
-
-    if (timerSecondsRemaining <= 0) {
-      clearInterval(timerInterval);
-      playChime();
-      
-      // Auto move to next step or finish
-      if (currentStepIndex + 1 < activeRoutine.steps.length) {
-        setTimeout(() => {
-          loadStep(currentStepIndex + 1);
-          if (isPlaying) {
-            timerEndTimestamp = Date.now() + (timerSecondsRemaining * 1000);
-            timerInterval = setInterval(tickTimer, 200);
-          }
-        }, 800); // minor buffer for audio chime playout
-      } else {
-        setTimeout(completeActiveRoutine, 800);
-      }
-    }
-  }
-
-  function moveStep(direction) {
     clearInterval(timerInterval);
-    const targetIdx = currentStepIndex + direction;
-    if (targetIdx >= 0 && targetIdx < activeRoutine.steps.length) {
-      loadStep(targetIdx);
-      if (isPlaying) {
-        timerEndTimestamp = Date.now() + (timerSecondsRemaining * 1000);
-        timerInterval = setInterval(tickTimer, 200);
-      }
-    } else if (targetIdx >= activeRoutine.steps.length) {
-      completeActiveRoutine();
-    }
+    playIcon.style.display = 'block';
+    pauseIcon.style.display = 'none';
+    timerStatus.textContent = 'Paused';
+  } else {
+    isPlaying = true;
+    timerEndTimestamp = Date.now() + (timerSecondsRemaining * 1000);
+    timerInterval = setInterval(tickTimer, 200);
+    playIcon.style.display = 'none';
+    pauseIcon.style.display = 'block';
+    timerStatus.textContent = 'Remaining';
   }
+}
 
-  function completeActiveRoutine() {
-    isPlaying = false;
+function tickTimer() {
+  const remaining = Math.max(0, Math.round((timerEndTimestamp - Date.now()) / 1000));
+  timerSecondsRemaining = remaining;
+  
+  updateTimerText();
+  updateProgressRing();
+
+  if (timerSecondsRemaining <= 0) {
     clearInterval(timerInterval);
     playChime();
     
-    // Log routine completion
-    logRoutineCompletion(activeRoutine);
-    
-    alert(`Congratulations! You have completed: "${activeRoutine.title}"! Your habit history and streaks are updated.`);
-    
-    resetPlayer();
-    switchPanel('tracker');
-  }
-
-  function resetPlayer() {
-    isPlaying = false;
-    if (timerInterval) clearInterval(timerInterval);
-    activeRoutine = null;
-    currentStepIndex = 0;
-    
-    playIcon.style.display = 'block';
-    pauseIcon.style.display = 'none';
-    
-    emptyState.style.display = 'block';
-    activeState.style.display = 'none';
-    document.getElementById('player-active-dot').style.display = 'none';
-    
-    // Stop any reading voice
-    window.speechSynthesis.cancel();
-  }
-
-  // Synthesize Chime Sound via Web Audio API using the global AudioContext
-  function playChime() {
-    initAudioContext();
-    if (!audioContext) return;
-    
-    try {
-      const now = audioContext.currentTime;
-      
-      // First tone (G5)
-      const osc1 = audioContext.createOscillator();
-      const gain1 = audioContext.createGain();
-      osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(783.99, now); // G5
-      gain1.gain.setValueAtTime(0.1, now);
-      gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-      osc1.connect(gain1);
-      gain1.connect(audioContext.destination);
-      osc1.start();
-      osc1.stop(now + 0.3);
-      
-      // Second tone (C6)
+    if (currentStepIndex + 1 < activeRoutine.steps.length) {
       setTimeout(() => {
-        if (!audioContext || audioContext.state === 'suspended') return;
-        const now2 = audioContext.currentTime;
-        const osc2 = audioContext.createOscillator();
-        const gain2 = audioContext.createGain();
-        osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(1046.50, now2); // C6
-        gain2.gain.setValueAtTime(0.1, now2);
-        gain2.gain.exponentialRampToValueAtTime(0.01, now2 + 0.4);
-        osc2.connect(gain2);
-        gain2.connect(audioContext.destination);
-        osc2.start();
-        osc2.stop(now2 + 0.4);
-      }, 150);
-    } catch (err) {
-      console.warn("Chime playback error:", err);
+        loadStep(currentStepIndex + 1);
+        if (isPlaying) {
+          timerEndTimestamp = Date.now() + (timerSecondsRemaining * 1000);
+          timerInterval = setInterval(tickTimer, 200);
+        }
+      }, 800);
+    } else {
+      setTimeout(completeActiveRoutine, 800);
     }
   }
+}
 
-  // Text-To-Speech step announcer
-  function speakStep(step) {
-    if (!voiceToggle.checked) return;
-    
-    try {
-      window.speechSynthesis.cancel(); // kill any active speech first
-      
-      const announcement = `Starting: ${step.title}. ${step.desc}`;
-      const utterance = new SpeechSynthesisUtterance(announcement);
-      utterance.rate = 0.95;
-      utterance.pitch = 1.0;
-      
-      // Try to bind an English voice if cached
-      const voices = window.speechSynthesis.getVoices();
-      const bestVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural')));
-      if (bestVoice) utterance.voice = bestVoice;
-      
-      window.speechSynthesis.speak(utterance);
-    } catch (err) {
-      console.warn("Speech Synthesis failed to run:", err);
+function moveStep(direction) {
+  clearInterval(timerInterval);
+  const targetIdx = currentStepIndex + direction;
+  if (targetIdx >= 0 && targetIdx < activeRoutine.steps.length) {
+    loadStep(targetIdx);
+    if (isPlaying) {
+      timerEndTimestamp = Date.now() + (timerSecondsRemaining * 1000);
+      timerInterval = setInterval(tickTimer, 200);
     }
+  } else if (targetIdx >= activeRoutine.steps.length) {
+    completeActiveRoutine();
+  }
+}
+
+function completeActiveRoutine() {
+  isPlaying = false;
+  clearInterval(timerInterval);
+  playChime();
+  
+  logRoutineCompletion(activeRoutine);
+  alert(`Congratulations! You have completed: "${activeRoutine.title}"! Your habit history and streaks are updated.`);
+  
+  resetPlayer();
+  switchPanel('tracker');
+}
+
+function resetPlayer() {
+  isPlaying = false;
+  if (timerInterval) clearInterval(timerInterval);
+  activeRoutine = null;
+  currentStepIndex = 0;
+  
+  document.getElementById('play-icon').style.display = 'block';
+  document.getElementById('pause-icon').style.display = 'none';
+  
+  document.getElementById('player-empty-state').style.display = 'block';
+  document.getElementById('player-active-state').style.display = 'none';
+  document.getElementById('player-active-dot').style.display = 'none';
+  
+  window.speechSynthesis.cancel();
+}
+
+function playChime() {
+  initAudioContext();
+  if (!audioContext) return;
+  
+  try {
+    const now = audioContext.currentTime;
+    
+    const osc1 = audioContext.createOscillator();
+    const gain1 = audioContext.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(783.99, now);
+    gain1.gain.setValueAtTime(0.1, now);
+    gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+    osc1.connect(gain1);
+    gain1.connect(audioContext.destination);
+    osc1.start();
+    osc1.stop(now + 0.3);
+    
+    setTimeout(() => {
+      if (!audioContext || audioContext.state === 'suspended') return;
+      const now2 = audioContext.currentTime;
+      const osc2 = audioContext.createOscillator();
+      const gain2 = audioContext.createGain();
+      osc2.type = 'sine';
+      osc2.frequency.setValueAtTime(1046.50, now2);
+      gain2.gain.setValueAtTime(0.1, now2);
+      gain2.gain.exponentialRampToValueAtTime(0.01, now2 + 0.4);
+      osc2.connect(gain2);
+      gain2.connect(audioContext.destination);
+      osc2.start();
+      osc2.stop(now2 + 0.4);
+    }, 150);
+  } catch (err) {
+    console.warn("Chime playback error:", err);
+  }
+}
+
+function speakStep(step) {
+  if (!voiceToggle || !voiceToggle.checked) return;
+  
+  try {
+    window.speechSynthesis.cancel();
+    
+    const announcement = `Starting: ${step.title}. ${step.desc}`;
+    const utterance = new SpeechSynthesisUtterance(announcement);
+    utterance.rate = 0.95;
+    utterance.pitch = 1.0;
+    
+    const voices = window.speechSynthesis.getVoices();
+    const bestVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Google') || v.name.includes('Natural')));
+    if (bestVoice) utterance.voice = bestVoice;
+    
+    window.speechSynthesis.speak(utterance);
+  } catch (err) {
+    console.warn("Speech Synthesis failed to run:", err);
   }
 }
 
@@ -590,7 +555,7 @@ function setupTracker() {
 }
 
 function logRoutineCompletion(routine) {
-  const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const todayStr = new Date().toISOString().split('T')[0];
   
   const record = {
     id: routine.id,
@@ -652,51 +617,52 @@ function updateTrackerUI() {
   const avgScoreEl = document.getElementById('stats-avg-score');
   const historyList = document.getElementById('tracker-history-list');
   
-  totalCompletedEl.textContent = completions.length;
-  currentStreakEl.textContent = `${userStreak} Days`;
-  longestStreakEl.textContent = `${userLongestStreak} Days`;
+  if (totalCompletedEl) totalCompletedEl.textContent = completions.length;
+  if (currentStreakEl) currentStreakEl.textContent = `${userStreak} Days`;
+  if (longestStreakEl) longestStreakEl.textContent = `${userLongestStreak} Days`;
   
-  if (completions.length > 0) {
-    const totalScore = completions.reduce((acc, curr) => acc + curr.score, 0);
-    avgScoreEl.textContent = `${Math.round(totalScore / completions.length)}%`;
-  } else {
-    avgScoreEl.textContent = '0%';
+  if (avgScoreEl) {
+    if (completions.length > 0) {
+      const totalScore = completions.reduce((acc, curr) => acc + curr.score, 0);
+      avgScoreEl.textContent = `${Math.round(totalScore / completions.length)}%`;
+    } else {
+      avgScoreEl.textContent = '0%';
+    }
   }
   
-  // Pop history log list
-  historyList.innerHTML = '';
-  if (completions.length === 0) {
-    historyList.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding-top:3rem;">No routines completed yet. Load a routine in the Player and run it to record history.</p>';
-  } else {
-    const sortedCompletions = [...completions].sort((a,b) => b.timestamp - a.timestamp);
-    sortedCompletions.forEach(item => {
-      const logDiv = document.createElement('div');
-      logDiv.style.padding = '0.75rem 1rem';
-      logDiv.style.borderBottom = '1px solid var(--border-color)';
-      logDiv.style.display = 'flex';
-      logDiv.style.justifyContent = 'space-between';
-      logDiv.style.alignItems = 'center';
-      logDiv.innerHTML = `
-        <div>
-          <strong style="font-size:0.9rem;">${item.title}</strong>
-          <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.1rem;">Date: ${item.date}</div>
-        </div>
-        <span class="card-badge" style="background:var(--accent-glow); color:var(--accent); font-size:0.65rem;">Score: ${item.score}%</span>
-      `;
-      historyList.appendChild(logDiv);
-    });
+  if (historyList) {
+    historyList.innerHTML = '';
+    if (completions.length === 0) {
+      historyList.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding-top:3rem;">No routines completed yet. Load a routine in the Player and run it to record history.</p>';
+    } else {
+      const sortedCompletions = [...completions].sort((a,b) => b.timestamp - a.timestamp);
+      sortedCompletions.forEach(item => {
+        const logDiv = document.createElement('div');
+        logDiv.style.padding = '0.75rem 1rem';
+        logDiv.style.borderBottom = '1px solid var(--border-color)';
+        logDiv.style.display = 'flex';
+        logDiv.style.justifyContent = 'space-between';
+        logDiv.style.alignItems = 'center';
+        logDiv.innerHTML = `
+          <div>
+            <strong style="font-size:0.9rem;">${item.title}</strong>
+            <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.1rem;">Date: ${item.date}</div>
+          </div>
+          <span class="card-badge" style="background:var(--accent-glow); color:var(--accent); font-size:0.65rem;">Score: ${item.score}%</span>
+        `;
+        historyList.appendChild(logDiv);
+      });
+    }
   }
 
-  // Render Calendar and Compliance charts
   renderCalendarGridJune2026();
   renderWeeklyComplianceChart();
 }
 
-// Fixed: Prevents future date completion logging
 function toggleCompletionOnDate(dateStr) {
   const selectedDate = new Date(dateStr + "T00:00:00");
   const today = new Date();
-  today.setHours(23, 59, 59, 999); // Set to end of today
+  today.setHours(23, 59, 59, 999);
   
   if (selectedDate > today) {
     alert("Focus Error: You cannot record routine completions for future dates.");
@@ -705,10 +671,8 @@ function toggleCompletionOnDate(dateStr) {
 
   const existingIndex = completions.findIndex(c => c.date === dateStr);
   if (existingIndex > -1) {
-    // Remove completion
     completions.splice(existingIndex, 1);
   } else {
-    // Add manual log
     completions.push({
       id: "manual_log",
       title: "Manual Activity Log",
@@ -724,63 +688,14 @@ function toggleCompletionOnDate(dateStr) {
   updateStreakDisplay();
 }
 
-function recalculateAllStreaks() {
-  const sortedDates = [...new Set(completions.map(c => c.date))].sort();
-  if (sortedDates.length === 0) {
-    userStreak = 0;
-    lastCompletionDate = "";
-    localStorage.setItem('user_streak', "0");
-    localStorage.setItem('last_completion_date', "");
-    return;
-  }
-  
-  let streak = 1;
-  let maxStreak = 1;
-  
-  for (let i = 1; i < sortedDates.length; i++) {
-    const prev = new Date(sortedDates[i-1]);
-    const curr = new Date(sortedDates[i]);
-    const diff = Math.ceil((curr - prev) / (1000 * 60 * 60 * 24));
-    
-    if (diff === 1) {
-      streak++;
-    } else if (diff > 1) {
-      streak = 1;
-    }
-    
-    if (streak > maxStreak) {
-      maxStreak = streak;
-    }
-  }
-  
-  const todayStr = new Date().toISOString().split('T')[0];
-  const lastLogged = sortedDates[sortedDates.length - 1];
-  
-  const lastDate = new Date(lastLogged);
-  const today = new Date(todayStr);
-  const diffFromToday = Math.ceil((today - lastDate) / (1000 * 60 * 60 * 24));
-  
-  if (diffFromToday > 1) {
-    userStreak = 0;
-  } else {
-    userStreak = streak;
-  }
-  
-  userLongestStreak = Math.max(userLongestStreak, maxStreak);
-  lastCompletionDate = lastLogged;
-  
-  localStorage.setItem('user_streak', userStreak.toString());
-  localStorage.setItem('user_longest_streak', userLongestStreak.toString());
-  localStorage.setItem('last_completion_date', lastCompletionDate);
-}
-
 function renderCalendarGridJune2026() {
   const gridContainer = document.getElementById('calendar-days-grid');
+  if (!gridContainer) return;
+  
   const headerLabels = Array.from(gridContainer.children).slice(0, 7);
   gridContainer.innerHTML = '';
   headerLabels.forEach(hl => gridContainer.appendChild(hl));
   
-  // June 2026 starts on Monday (index 1). Days: 30
   for (let i = 0; i < 1; i++) {
     const emptyDay = document.createElement('div');
     emptyDay.className = 'calendar-day inactive';
@@ -811,7 +726,6 @@ function renderCalendarGridJune2026() {
   }
 }
 
-// Renders the 7-Day compliance trends via dynamic SVG vector bars
 function renderWeeklyComplianceChart() {
   const container = document.getElementById('weekly-compliance-chart-container');
   if (!container) return;
@@ -819,7 +733,6 @@ function renderWeeklyComplianceChart() {
   const stats = [];
   const today = new Date();
   
-  // Build last 7 days list
   for (let i = 6; i >= 0; i--) {
     const d = new Date();
     d.setDate(today.getDate() - i);
@@ -829,10 +742,9 @@ function renderWeeklyComplianceChart() {
     stats.push({ count, label });
   }
 
-  const maxVal = Math.max(...stats.map(s => s.count), 2); // default scale top is 2
+  const maxVal = Math.max(...stats.map(s => s.count), 2);
   
   let svg = `<svg viewBox="0 0 500 130" width="100%" height="100%">
-    <!-- Gridlines -->
     <line class="chart-grid-line" x1="30" y1="20" x2="480" y2="20"></line>
     <line class="chart-grid-line" x1="30" y1="60" x2="480" y2="60"></line>
     <line class="chart-grid-line" x1="30" y1="100" x2="480" y2="100"></line>
@@ -841,7 +753,7 @@ function renderWeeklyComplianceChart() {
 
   stats.forEach((item, idx) => {
     const x = 50 + idx * 60;
-    const barHeight = (item.count / maxVal) * 75; // Max height inside SVG box is 75px
+    const barHeight = (item.count / maxVal) * 75;
     const y = 100 - barHeight;
 
     svg += `
@@ -863,6 +775,8 @@ function setupCreator() {
   const stepsContainer = document.getElementById('creator-steps-container');
   const emptyPreview = document.getElementById('creator-empty-preview');
 
+  if (!factSelect) return;
+
   factSelect.innerHTML = '';
   Object.keys(facts).forEach(key => {
     const opt = document.createElement('option');
@@ -871,7 +785,6 @@ function setupCreator() {
     factSelect.appendChild(opt);
   });
 
-  // Step adding event
   addStepBtn.addEventListener('click', () => {
     const titleInput = document.getElementById('creator-step-title');
     const durInput = document.getElementById('creator-step-duration');
@@ -1006,6 +919,8 @@ function setupBackupRestore() {
   const restoreBtn = document.getElementById('tracker-restore-btn');
   const restoreInput = document.getElementById('tracker-restore-input');
 
+  if (!backupBtn) return;
+
   backupBtn.addEventListener('click', () => {
     const backupData = {
       completions,
@@ -1040,7 +955,6 @@ function setupBackupRestore() {
       try {
         const data = JSON.parse(evt.target.result);
         
-        // Strict structure validation
         if (data && Array.isArray(data.completions) && Array.isArray(data.customRoutines)) {
           localStorage.setItem('routine_completions', JSON.stringify(data.completions));
           localStorage.setItem('custom_routines', JSON.stringify(data.customRoutines));
@@ -1067,7 +981,7 @@ function setupBackupRestore() {
       }
     };
     reader.readAsText(file);
-    restoreInput.value = ''; // clear input
+    restoreInput.value = '';
   });
 }
 
@@ -1079,9 +993,10 @@ function setupFactExplorer() {
   const searchInput = document.getElementById('fact-explorer-search');
   const listContainer = document.getElementById('fact-explorer-list');
 
+  if (!openBtn) return;
+
   openBtn.addEventListener('click', () => {
     modal.style.display = 'flex';
-    // Trigger transition opacity
     setTimeout(() => {
       modal.classList.add('active');
     }, 10);

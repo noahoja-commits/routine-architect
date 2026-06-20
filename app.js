@@ -733,6 +733,10 @@ function updateStreakDisplay() {
   streakValues.forEach(elem => {
     elem.textContent = `${userStreak} Day${userStreak === 1 ? '' : 's'}`;
   });
+  const mobileStreak = document.getElementById('mobile-header-streak-badge');
+  if (mobileStreak) {
+    mobileStreak.textContent = `🔥 ${userStreak}`;
+  }
 }
 
 function updateTrackerUI() {
@@ -853,6 +857,12 @@ function updateLevelingUI() {
       badgesContainer.appendChild(bDiv);
     });
   }
+
+  // Update mobile sticky top header elements
+  const mobileEmoji = document.getElementById('mobile-header-rank-emoji');
+  const mobileLevel = document.getElementById('mobile-header-level-badge');
+  if (mobileEmoji) mobileEmoji.textContent = info.emoji;
+  if (mobileLevel) mobileLevel.textContent = `Lvl ${info.level}`;
 }
 
 // Category Donut Chart builder

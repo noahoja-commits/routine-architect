@@ -1495,4 +1495,172 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
+/* Pre-flight Scrollable Scope & Customizer Fixes */
+.modal-card {
+  max-height: 90vh !important;
+}
+
+#preflight-steps-list {
+  max-height: 48vh !important;
+  overflow-y: auto !important;
+  padding-right: 0.25rem;
+}
+
+/* Dynamic Equalizer Visualizer Styling */
+.equalizer-wrapper {
+  display: none;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+  margin-left: 8px;
+}
+
+.equalizer-wrapper.active {
+  display: inline-flex !important;
+}
+
+.equalizer-bar {
+  display: inline-block;
+  width: 2px;
+  background-color: var(--primary);
+  border-radius: 1px;
+  height: 2px;
+  animation: bounce-equalizer 1s infinite alternate ease-in-out;
+}
+
+.equalizer-bar:nth-child(1) { height: 3px; animation-duration: 0.75s; animation-delay: 0.1s; background-color: var(--primary); }
+.equalizer-bar:nth-child(2) { height: 9px; animation-duration: 1.05s; animation-delay: 0.3s; background-color: var(--secondary); }
+.equalizer-bar:nth-child(3) { height: 5px; animation-duration: 0.85s; animation-delay: 0.2s; background-color: var(--accent); }
+.equalizer-bar:nth-child(4) { height: 11px; animation-duration: 1.15s; animation-delay: 0.4s; background-color: var(--primary); }
+.equalizer-bar:nth-child(5) { height: 7px; animation-duration: 0.65s; animation-delay: 0.15s; background-color: var(--secondary); }
+.equalizer-bar:nth-child(6) { height: 4px; animation-duration: 0.95s; animation-delay: 0.25s; background-color: var(--accent); }
+
+@keyframes bounce-equalizer {
+  0% { transform: scaleY(1); }
+  100% { transform: scaleY(3.5); transform-origin: bottom; }
+}
+
+/* Daily Science Fact Banner Styling */
+.daily-fact-banner {
+  background: linear-gradient(135deg, var(--secondary-glow), var(--primary-glow));
+  border: 1px solid rgba(217, 70, 239, 0.2);
+  border-radius: var(--radius-md);
+  padding: 0.85rem 1.1rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  animation: slide-in-banner 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.daily-fact-banner::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 4px;
+  height: 100%;
+  background: linear-gradient(to bottom, var(--secondary), var(--primary));
+}
+
+.fact-banner-icon {
+  font-size: 1.35rem;
+  flex-shrink: 0;
+}
+
+.fact-banner-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-grow: 1;
+  padding-right: 1.5rem;
+}
+
+.fact-banner-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+
+.fact-banner-text {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.fact-banner-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  transition: var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+
+.fact-banner-close:hover {
+  color: var(--text-primary);
+  background-color: var(--border-color);
+}
+
+@keyframes slide-in-banner {
+  from { transform: translateY(-10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* Viewport Adjustments for Screens Under 375px */
+@media (max-width: 375px) {
+  .main-content {
+    padding: calc(0.75rem + env(safe-area-inset-top)) 0.75rem calc(75px + env(safe-area-inset-bottom)) 0.75rem !important;
+  }
+  .panel-title {
+    font-size: 1.4rem !important;
+  }
+  .panel-subtitle {
+    font-size: 0.8rem !important;
+    line-height: 1.3;
+  }
+  .card, .step-card, .preflight-step-item {
+    padding: 0.65rem !important;
+    gap: 0.5rem !important;
+  }
+  .timer-dial-container {
+    width: 140px !important;
+    height: 140px !important;
+  }
+  .timer-time {
+    font-size: 2rem !important;
+  }
+  .btn-play-pause {
+    width: 50px !important;
+    height: 50px !important;
+  }
+  .preflight-step-item input {
+    font-size: 0.75rem !important;
+  }
+  .sidebar {
+    padding: 0.5rem 0.5rem calc(0.5rem + env(safe-area-inset-bottom)) 0.5rem !important;
+  }
+  .nav-link {
+    padding: 4px 8px !important;
+    font-size: 0.65rem !important;
+  }
+  .daily-fact-banner {
+    padding: 0.65rem 0.85rem !important;
+    margin-bottom: 1rem !important;
+  }
+}
+
 

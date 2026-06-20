@@ -62,6 +62,7 @@ function init() {
   setupAmbientController();
   updateStreakDisplay();
   updateLevelingUI();
+  loadDailyScienceFact();
   
   document.body.addEventListener('click', initAudioContext, { once: true });
 }
@@ -86,12 +87,59 @@ function initAudioContext() {
   }
 }
 
+// Physical haptic thumps (Web Vibration API)
+function vibratePattern(pattern) {
+  if ('vibrate' in navigator) {
+    try {
+      navigator.vibrate(pattern);
+    } catch (err) {
+      // Catch and ignore safety exceptions
+    }
+  }
+}
+
+// Daily Science Fact Banner Loader
+function loadDailyScienceFact() {
+  const banner = document.getElementById('daily-fact-banner');
+  const bannerText = document.getElementById('daily-fact-banner-text');
+  const closeBtn = document.getElementById('daily-fact-close-btn');
+
+  if (!banner || !bannerText || !closeBtn) return;
+
+  if (sessionStorage.getItem('daily_fact_closed') === 'true') {
+    banner.style.display = 'none';
+    return;
+  }
+
+  const keys = Object.keys(facts);
+  if (keys.length === 0) return;
+
+  // Stably select fact based on current day of the year
+  const today = new Date();
+  const daySeed = today.getFullYear() * 1000 + today.getMonth() * 100 + today.getDate();
+  const randomIndex = daySeed % keys.length;
+  const factKey = keys[randomIndex];
+  const fact = facts[factKey];
+
+  if (fact) {
+    bannerText.innerHTML = `<strong>${fact.title}</strong>: ${fact.text} <em>(${fact.source})</em>`;
+    banner.style.display = 'flex';
+  }
+
+  closeBtn.addEventListener('click', () => {
+    banner.style.display = 'none';
+    sessionStorage.setItem('daily_fact_closed', 'true');
+    vibratePattern([50]); // subtle haptic click on dismiss
+  });
+}
+
 // 1. Navigation Controller
 function setupNavigation() {
   navLinks.forEach(link => {
     link.addEventListener('click', (e) => {
       e.preventDefault();
       const target = link.dataset.target;
+      vibratePattern([40]); // Subtle click vibe
       switchPanel(target);
     });
   });
@@ -131,6 +179,7 @@ function setupTheme() {
   themeDarkBtn.addEventListener('click', () => {
     document.documentElement.setAttribute('data-theme', 'dark');
     localStorage.setItem('theme', 'dark');
+    vibratePattern([40]);
     themeDarkBtn.classList.add('active');
     themeLightBtn.classList.remove('active');
   });
@@ -138,6 +187,7 @@ function setupTheme() {
   themeLightBtn.addEventListener('click', () => {
     document.documentElement.setAttribute('data-theme', 'light');
     localStorage.setItem('theme', 'light');
+    vibratePattern([40]);
     themeLightBtn.classList.add('active');
     themeDarkBtn.classList.remove('active');
   });
@@ -183,6 +233,7 @@ function renderLibrary() {
 
     card.querySelector('.card-btn').addEventListener('click', () => {
       initAudioContext();
+      vibratePattern([50]);
       openPreflightAdjuster(routine); // Launches Pre-flight Customizer Modal
     });
 
@@ -313,20 +364,26 @@ function setupPlayer() {
 
   playBtn.addEventListener('click', () => {
     initAudioContext();
+    vibratePattern([50]);
     togglePlayPause();
   });
   
   prevBtn.addEventListener('click', () => {
     initAudioContext();
+    vibratePattern([40]);
     moveStep(-1);
   });
   
   nextBtn.addEventListener('click', () => {
     initAudioContext();
+    vibratePattern([40]);
     moveStep(1);
   });
   
-  cancelBtn.addEventListener('click', resetPlayer);
+  cancelBtn.addEventListener('click', () => {
+    vibratePattern([60]);
+    resetPlayer();
+  });
 }
 
 function loadRoutineIntoPlayer(routine) {
@@ -487,6 +544,8 @@ function completeActiveRoutine() {
   stopAmbientSoundscape();
   document.getElementById('ambient-sound-toggle').checked = false;
   
+  vibratePattern([200, 100, 200, 100, 300]); // Triumphant completion pattern
+  
   logRoutineCompletion(activeRoutine);
   alert(`Congratulations! You completed "${activeRoutine.title}"! Earned ${activeRoutine.duration * 10} XP.`);
   
@@ -515,6 +574,7 @@ function resetPlayer() {
 
 function playChime() {
   initAudioContext();
+  vibratePattern([100, 80, 100]); // double tap haptic on step transition
   if (!audioContext) return;
   
   try {
@@ -1278,6 +1338,7 @@ function setupPreflightAdjuster() {
   });
 
   addStepBtn.addEventListener('click', () => {
+    vibratePattern([40]);
     preflightSteps.push({
       title: "New Activity",
       duration: 10,
@@ -1289,6 +1350,7 @@ function setupPreflightAdjuster() {
   });
 
   launchBtn.addEventListener('click', () => {
+    vibratePattern([70]);
     if (preflightSteps.length === 0) {
       alert("Please add at least one step to launch.");
       return;
@@ -1370,8 +1432,10 @@ function renderPreflightSteps() {
     div.querySelector(`#pf-desc-${idx}`).addEventListener('input', (e) => {
       preflightSteps[idx].desc = e.target.value;
     });
-    div.querySelector(`#pf-dur-${idx}`).addEventListener('input', (e) => {
-      const val = parseInt(e.target.value) || 1;
+    div.querySelector(`#pf-dur-${idx}`).addEventListener('change', (e) => {
+      let val = parseInt(e.target.value);
+      if (isNaN(val) || val <= 0) val = 1;
+      e.target.value = val;
       preflightSteps[idx].duration = val;
       
       let sum = 0;
@@ -1380,9 +1444,7 @@ function renderPreflightSteps() {
         sum += s.duration;
       });
 
-      let elapsed = 0;
-      preflightSteps.forEach(s => elapsed += s.duration);
-      durLabel.textContent = `Total Duration: ${elapsed} mins`;
+      durLabel.textContent = `Total Duration: ${preflightSteps.reduce((acc, s) => acc + s.duration, 0)} mins`;
     });
 
     div.querySelector('button').addEventListener('click', () => {
@@ -1439,6 +1501,10 @@ function playAmbientSoundscape() {
 
   stopAmbientSoundscape(); // clear active soundscape
   
+  // Activate CSS Equalizer visualizer
+  const equalizer = document.getElementById('soundscape-equalizer');
+  if (equalizer) equalizer.classList.add('active');
+
   ambientGainNode = audioContext.createGain();
   const volumeSlider = document.getElementById('ambient-volume-slider');
   const userVol = volumeSlider ? parseFloat(volumeSlider.value) : 0.5;
@@ -1458,6 +1524,10 @@ function playAmbientSoundscape() {
 }
 
 function stopAmbientSoundscape() {
+  // Deactivate CSS Equalizer visualizer
+  const equalizer = document.getElementById('soundscape-equalizer');
+  if (equalizer) equalizer.classList.remove('active');
+
   try {
     if (brownNoiseNode) {
       brownNoiseNode.disconnect();

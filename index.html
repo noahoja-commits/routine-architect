@@ -11,6 +11,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="apple-touch-icon" href="icon-512.png">
+  <link rel="icon" type="image/png" href="icon-512.png">
   
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -105,6 +106,16 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
             <span>Explore Science Vault</span>
           </button>
+        </div>
+        
+        <!-- Daily Science Fact Banner -->
+        <div class="daily-fact-banner" id="daily-fact-banner" style="display: none;">
+          <div class="fact-banner-icon">💡</div>
+          <div class="fact-banner-content">
+            <span class="fact-banner-title">Daily Science Insight</span>
+            <span class="fact-banner-text" id="daily-fact-banner-text">Loading daily biological hack...</span>
+          </div>
+          <button class="fact-banner-close" id="daily-fact-close-btn">&times;</button>
         </div>
         
         <div class="library-grid" id="prebuilt-library-grid">
@@ -273,7 +284,17 @@
               <!-- Ambient Soundscapes Generator -->
               <div style="width:100%; margin-top:2rem; border-top:1px solid var(--border-color); padding-top:1.5rem; text-align:left;">
                 <div style="font-size:0.8rem; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.75rem; display:flex; justify-content:space-between; align-items:center;">
-                  <span style="display:flex; align-items:center; gap:0.4rem;">🔊 Ambient Soundscape</span>
+                  <span style="display:flex; align-items:center; gap:0.4rem;">
+                    🔊 Ambient Soundscape
+                    <span id="soundscape-equalizer" class="equalizer-wrapper">
+                      <span class="equalizer-bar"></span>
+                      <span class="equalizer-bar"></span>
+                      <span class="equalizer-bar"></span>
+                      <span class="equalizer-bar"></span>
+                      <span class="equalizer-bar"></span>
+                      <span class="equalizer-bar"></span>
+                    </span>
+                  </span>
                   <label class="switch-label" style="position:relative; display:inline-block; width:36px; height:18px; cursor:pointer;">
                     <input type="checkbox" id="ambient-sound-toggle" style="opacity:0; width:0; height:0;">
                     <span class="switch-slider" style="position:absolute; top:0; left:0; right:0; bottom:0; background-color:var(--border-color-hover); border-radius:34px; transition:0.3s;"></span>

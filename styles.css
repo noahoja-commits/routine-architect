@@ -1367,3 +1367,132 @@ body {
   text-anchor: middle;
 }
 
+/* Pre-flight Step Item Editor */
+.preflight-step-item {
+  background-color: var(--bg-surface-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 1rem;
+  align-items: center;
+  transition: var(--transition-fast);
+}
+
+.preflight-step-item:hover {
+  border-color: var(--border-color-hover);
+}
+
+/* Player Timeline Checklist */
+.timeline-step-node {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.timeline-step-node:hover {
+  background-color: var(--bg-surface-elevated);
+}
+
+.timeline-indicator {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex-shrink: 0;
+  transition: var(--transition-fast);
+}
+
+.timeline-step-node.completed .timeline-indicator {
+  border-color: var(--success);
+  background-color: var(--success);
+}
+
+.timeline-step-node.completed .timeline-indicator::after {
+  content: "✓";
+  font-size: 8px;
+  font-weight: 900;
+  color: var(--bg-surface);
+}
+
+.timeline-step-node.active .timeline-indicator {
+  border-color: var(--primary);
+}
+
+.timeline-step-node.active .timeline-indicator::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--primary);
+  animation: pulse-node 1.2s infinite;
+}
+
+.timeline-step-text {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: var(--transition-fast);
+}
+
+.timeline-step-node.active .timeline-step-text {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.timeline-step-node.completed .timeline-step-text {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+@keyframes pulse-node {
+  0% { transform: scale(0.8); opacity: 0.5; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(0.8); opacity: 0.5; }
+}
+
+/* Category Donut Slices */
+.donut-slice {
+  transition: stroke-width 0.25s ease, filter 0.25s ease;
+  cursor: pointer;
+}
+
+.donut-slice:hover {
+  stroke-width: 14;
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.08));
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* Progression Badges */
+.badge-icon {
+  font-size: 0.75rem;
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-color);
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+

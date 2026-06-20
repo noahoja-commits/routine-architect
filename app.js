@@ -8,6 +8,9 @@ let userStreak = parseInt(localStorage.getItem('user_streak')) || 0;
 let userLongestStreak = parseInt(localStorage.getItem('user_longest_streak')) || 0;
 let lastCompletionDate = localStorage.getItem('last_completion_date') || "";
 
+// XP & Level State (New Gamification System)
+let userXP = parseInt(localStorage.getItem('user_xp')) || 0;
+
 // Active Player State
 let activeRoutine = null;
 let currentStepIndex = 0;
@@ -16,17 +19,29 @@ let timerSecondsRemaining = 0;
 let timerDurationTotal = 0;
 let timerEndTimestamp = 0;
 let isPlaying = false;
+
+// Audio Variables (Unlocked and procedurally synthesized offline)
 let audioContext = null;
+let ambientGainNode = null;
+let brownNoiseNode = null;
+let binauralOscL = null;
+let binauralOscR = null;
+let pulseOsc = null;
+let pulseLfo = null;
+let isAmbientPlaying = false;
+
+// Pre-flight Adjuster State
+let preflightSteps = [];
+let preflightRoutine = null;
 
 // Custom Builder State
 let creatorSteps = [];
 
-// DOM Elements (Selected in init() once DOM is ready)
+// DOM Elements
 let navLinks, panels, prebuiltGrid, streakValues, themeDarkBtn, themeLightBtn, voiceToggle;
 
 // Initialize Application
 function init() {
-  // Select DOM elements
   navLinks = document.querySelectorAll('.nav-link');
   panels = document.querySelectorAll('.view-panel');
   prebuiltGrid = document.getElementById('prebuilt-library-grid');
@@ -43,13 +58,14 @@ function init() {
   setupCreator();
   setupTracker();
   setupFactExplorer();
+  setupPreflightAdjuster();
+  setupAmbientController();
   updateStreakDisplay();
+  updateLevelingUI();
   
-  // Prime audio context on any first body tap to comply with browser restrictions
   document.body.addEventListener('click', initAudioContext, { once: true });
 }
 
-// Bulletproof DOM Loading State Check
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', init);
 } else {
@@ -167,8 +183,7 @@ function renderLibrary() {
 
     card.querySelector('.card-btn').addEventListener('click', () => {
       initAudioContext();
-      loadRoutineIntoPlayer(routine);
-      switchPanel('player');
+      openPreflightAdjuster(routine); // Launches Pre-flight Customizer Modal
     });
 
     prebuiltGrid.appendChild(card);
@@ -280,8 +295,7 @@ function setupGenerator() {
   startBtn.addEventListener('click', () => {
     initAudioContext();
     if (currentGeneratedRoutine) {
-      loadRoutineIntoPlayer(currentGeneratedRoutine);
-      switchPanel('player');
+      openPreflightAdjuster(currentGeneratedRoutine); // Launch Customizer
     }
   });
 
@@ -315,7 +329,6 @@ function setupPlayer() {
   cancelBtn.addEventListener('click', resetPlayer);
 }
 
-// Module-level Player operations (Prevents ReferenceError on event triggers)
 function loadRoutineIntoPlayer(routine) {
   if (!routine.steps || routine.steps.length === 0) {
     alert("This routine has no steps to play.");
@@ -367,8 +380,13 @@ function loadStep(idx) {
   updateTimerText();
   updateProgressRing();
   loadFactForPlayer(step.factKey);
-  
+  renderPlayerTimeline(); // Redraw checklist
   speakStep(step);
+  
+  // Update procedural soundscape if currently playing
+  if (isAmbientPlaying) {
+    playAmbientSoundscape();
+  }
 }
 
 function loadFactForPlayer(factKey) {
@@ -466,9 +484,11 @@ function completeActiveRoutine() {
   isPlaying = false;
   clearInterval(timerInterval);
   playChime();
+  stopAmbientSoundscape();
+  document.getElementById('ambient-sound-toggle').checked = false;
   
   logRoutineCompletion(activeRoutine);
-  alert(`Congratulations! You have completed: "${activeRoutine.title}"! Your habit history and streaks are updated.`);
+  alert(`Congratulations! You completed "${activeRoutine.title}"! Earned ${activeRoutine.duration * 10} XP.`);
   
   resetPlayer();
   switchPanel('tracker');
@@ -479,6 +499,9 @@ function resetPlayer() {
   if (timerInterval) clearInterval(timerInterval);
   activeRoutine = null;
   currentStepIndex = 0;
+  
+  stopAmbientSoundscape();
+  document.getElementById('ambient-sound-toggle').checked = false;
   
   document.getElementById('play-icon').style.display = 'block';
   document.getElementById('pause-icon').style.display = 'none';
@@ -548,6 +571,42 @@ function speakStep(step) {
   }
 }
 
+// Renders the pulsing active checklist timeline on player side panel
+function renderPlayerTimeline() {
+  const stepsContainer = document.getElementById('player-timeline-steps');
+  if (!stepsContainer || !activeRoutine) return;
+
+  stepsContainer.innerHTML = '';
+
+  activeRoutine.steps.forEach((step, idx) => {
+    const node = document.createElement('div');
+    let stateClass = '';
+    
+    if (idx === currentStepIndex) {
+      stateClass = 'active';
+    } else if (idx < currentStepIndex) {
+      stateClass = 'completed';
+    }
+
+    node.className = `timeline-step-node ${stateClass}`;
+    node.innerHTML = `
+      <div class="timeline-indicator"></div>
+      <span class="timeline-step-text">${idx + 1}. ${step.title} (${step.duration} min)</span>
+    `;
+
+    // Click to Jump directly to step
+    node.addEventListener('click', () => {
+      initAudioContext();
+      loadStep(idx);
+      if (isPlaying) {
+        timerEndTimestamp = Date.now() + (timerSecondsRemaining * 1000);
+      }
+    });
+
+    stepsContainer.appendChild(node);
+  });
+}
+
 // 6. Habit Tracker & Analytics Controller
 function setupTracker() {
   updateTrackerUI();
@@ -568,9 +627,15 @@ function logRoutineCompletion(routine) {
   completions.push(record);
   localStorage.setItem('routine_completions', JSON.stringify(completions));
   
+  // Calculate XP points: 10 XP per minute focused
+  const xpEarned = routine.duration * 10;
+  userXP += xpEarned;
+  localStorage.setItem('user_xp', userXP.toString());
+  
   calculateStreaks(todayStr);
   updateTrackerUI();
   updateStreakDisplay();
+  updateLevelingUI();
 }
 
 function calculateStreaks(todayStr) {
@@ -657,6 +722,149 @@ function updateTrackerUI() {
 
   renderCalendarGridJune2026();
   renderWeeklyComplianceChart();
+  renderCategoryDonutChart();
+}
+
+// Game Progression Engine
+function getRankInfo(xp) {
+  const level = Math.floor(xp / 500) + 1; // 500 XP per level
+  const xpInLevel = xp % 500;
+  
+  const ranks = [
+    { name: "Circadian Novice", emoji: "🌱" },
+    { name: "Habit Builder", emoji: "🧱" },
+    { name: "Dopamine Miner", emoji: "⚡" },
+    { name: "Focus Monk", emoji: "🧘" },
+    { name: "Flow State Master", emoji: "🌊" },
+    { name: "Biological Master", emoji: "👑" }
+  ];
+  
+  const rank = ranks[Math.min(level - 1, ranks.length - 1)];
+  return { level, xpInLevel, name: rank.name, emoji: rank.emoji };
+}
+
+function updateLevelingUI() {
+  const info = getRankInfo(userXP);
+  
+  // Sidebar elements
+  const sidebarLevelVal = document.getElementById('sidebar-level-value');
+  const sidebarRankTitle = document.getElementById('sidebar-rank-title');
+  const sidebarRankEmoji = document.getElementById('sidebar-rank-emoji');
+  if (sidebarLevelVal) sidebarLevelVal.textContent = `Level ${info.level}`;
+  if (sidebarRankTitle) sidebarRankTitle.textContent = info.name;
+  if (sidebarRankEmoji) sidebarRankEmoji.textContent = info.emoji;
+  
+  // Dashboard Level card
+  const userLevelBadge = document.getElementById('user-level-badge');
+  const userRankEmoji = document.getElementById('user-rank-emoji');
+  const userRankTitle = document.getElementById('user-rank-title');
+  const userXpText = document.getElementById('user-xp-text');
+  const userXpProgressBar = document.getElementById('user-xp-progress-bar');
+  const badgesContainer = document.getElementById('user-badges-container');
+  
+  if (userLevelBadge) userLevelBadge.textContent = `Lvl ${info.level}`;
+  if (userRankEmoji) userRankEmoji.textContent = info.emoji;
+  if (userRankTitle) userRankTitle.textContent = info.name;
+  if (userXpText) userXpText.textContent = `${info.xpInLevel} / 500 XP`;
+  if (userXpProgressBar) userXpProgressBar.style.width = `${(info.xpInLevel / 500) * 100}%`;
+  
+  if (badgesContainer) {
+    badgesContainer.innerHTML = '';
+    const badgeRanks = [
+      { name: "Novice", emoji: "🌱" },
+      { name: "Builder", emoji: "🧱" },
+      { name: "Miner", emoji: "⚡" },
+      { name: "Monk", emoji: "🧘" },
+      { name: "Flow", emoji: "🌊" },
+      { name: "Master", emoji: "👑" }
+    ];
+    
+    badgeRanks.forEach((b, idx) => {
+      const unlocked = info.level > idx;
+      const bDiv = document.createElement('div');
+      bDiv.className = 'badge-icon';
+      if (!unlocked) {
+        bDiv.style.opacity = '0.22';
+        bDiv.title = `Locked (Unlocks at Lvl ${idx + 1})`;
+      } else {
+        bDiv.title = `Unlocked at Level ${idx + 1}`;
+      }
+      bDiv.innerHTML = `<span>${b.emoji}</span><span>${b.name}</span>`;
+      badgesContainer.appendChild(bDiv);
+    });
+  }
+}
+
+// Category Donut Chart builder
+function renderCategoryDonutChart() {
+  const container = document.getElementById('category-donut-chart-container');
+  const legend = document.getElementById('category-chart-legend');
+  if (!container || !legend) return;
+  
+  const catColors = {
+    "Morning & Wakeup": "#6366f1",
+    "Productivity & Tech": "#d946ef",
+    "Health & Sleep": "#14b8a6",
+    "Fitness & Wellness": "#10b981",
+    "General Productivity": "#f59e0b"
+  };
+  
+  const counts = {};
+  let total = 0;
+  
+  completions.forEach(c => {
+    let category = "General Productivity";
+    const routine = [...prebuiltRoutines, ...customRoutines].find(r => r.id === c.id);
+    if (routine) category = routine.category;
+    
+    counts[category] = (counts[category] || 0) + 1;
+    total++;
+  });
+  
+  if (total === 0) {
+    container.innerHTML = '<span style="font-size:0.75rem; color:var(--text-muted);">No completions yet</span>';
+    legend.innerHTML = '<span style="font-size:0.7rem; color:var(--text-muted);">Complete a routine to map categories</span>';
+    return;
+  }
+  
+  let strokeAccum = 0;
+  const radius = 35;
+  const circ = 2 * Math.PI * radius; // ~219.9
+  
+  let svg = `<svg viewBox="0 0 100 100" width="100%" height="100%">`;
+  let legendHtml = "";
+  
+  Object.keys(counts).forEach(cat => {
+    const count = counts[cat];
+    const percentage = count / total;
+    const strokeLength = percentage * circ;
+    const strokeOffset = circ - strokeLength + strokeAccum;
+    const color = catColors[cat] || "#a1a1aa";
+    
+    svg += `
+      <circle class="donut-slice" cx="50" cy="50" r="${radius}" fill="transparent" 
+              stroke="${color}" stroke-width="9" 
+              stroke-dasharray="${circ}" stroke-dashoffset="${strokeOffset}" 
+              transform="rotate(-90 50 50)"></circle>
+    `;
+    
+    strokeAccum -= strokeLength;
+    
+    legendHtml += `
+      <div style="display:flex; align-items:center; gap:0.4rem;">
+        <span class="legend-dot" style="background:${color};"></span>
+        <span style="white-space:nowrap;">${cat.split('&')[0].trim()}: <strong>${Math.round(percentage * 100)}%</strong></span>
+      </div>
+    `;
+  });
+  
+  svg += `<circle cx="50" cy="50" r="26" fill="var(--bg-surface)"></circle>
+    <text x="50" y="52" text-anchor="middle" font-family="var(--font-display)" font-weight="800" font-size="12" fill="var(--text-primary)">${total}</text>
+    <text x="50" y="63" text-anchor="middle" font-family="var(--font-sans)" font-size="7" fill="var(--text-secondary)">TOTAL</text>
+  </svg>`;
+  
+  container.innerHTML = svg;
+  legend.innerHTML = legendHtml;
 }
 
 function toggleCompletionOnDate(dateStr) {
@@ -927,7 +1135,8 @@ function setupBackupRestore() {
       customRoutines,
       userStreak,
       userLongestStreak,
-      lastCompletionDate
+      lastCompletionDate,
+      userXP // Backup XP as well
     };
 
     const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -961,16 +1170,19 @@ function setupBackupRestore() {
           localStorage.setItem('user_streak', (data.userStreak || 0).toString());
           localStorage.setItem('user_longest_streak', (data.userLongestStreak || 0).toString());
           localStorage.setItem('last_completion_date', data.lastCompletionDate || "");
+          localStorage.setItem('user_xp', (data.userXP || 0).toString());
 
           completions = data.completions;
           customRoutines = data.customRoutines;
           userStreak = parseInt(data.userStreak) || 0;
           userLongestStreak = parseInt(data.userLongestStreak) || 0;
           lastCompletionDate = data.lastCompletionDate || "";
+          userXP = parseInt(data.userXP) || 0;
 
           renderLibrary();
           updateTrackerUI();
           updateStreakDisplay();
+          updateLevelingUI();
 
           alert("Vault restored successfully! Data updated.");
         } else {
@@ -1051,4 +1263,302 @@ function setupFactExplorer() {
       listContainer.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:2rem 0;">No matching facts found in the science vault.</p>';
     }
   }
+}
+
+// 10. Pre-flight Adjuster Modal Controller (New Customizer)
+function setupPreflightAdjuster() {
+  const modal = document.getElementById('preflight-modal');
+  const closeBtn = document.getElementById('preflight-close-btn');
+  const addStepBtn = document.getElementById('preflight-add-step-btn');
+  const launchBtn = document.getElementById('preflight-launch-btn');
+
+  closeBtn.addEventListener('click', closePreflight);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closePreflight();
+  });
+
+  addStepBtn.addEventListener('click', () => {
+    preflightSteps.push({
+      title: "New Activity",
+      duration: 10,
+      desc: "Custom focus activity block.",
+      factKey: "pomodoro",
+      time: stepsToTimeLabel(preflightSteps)
+    });
+    renderPreflightSteps();
+  });
+
+  launchBtn.addEventListener('click', () => {
+    if (preflightSteps.length === 0) {
+      alert("Please add at least one step to launch.");
+      return;
+    }
+    closePreflight();
+    
+    // Launch edited routine in Active Player
+    loadRoutineIntoPlayer({
+      ...preflightRoutine,
+      duration: preflightSteps.reduce((acc, s) => acc + s.duration, 0),
+      steps: [...preflightSteps]
+    });
+    switchPanel('player');
+  });
+
+  function stepsToTimeLabel(list) {
+    let elapsed = 0;
+    list.forEach(s => elapsed += s.duration);
+    return elapsed === 0 ? "Start" : `+${elapsed} mins`;
+  }
+}
+
+function openPreflightAdjuster(routine) {
+  preflightRoutine = JSON.parse(JSON.stringify(routine)); // deep clone
+  preflightSteps = preflightRoutine.steps;
+
+  const modal = document.getElementById('preflight-modal');
+  document.getElementById('preflight-routine-title').textContent = `Customize: ${routine.title}`;
+  
+  renderPreflightSteps();
+  
+  modal.style.display = 'flex';
+  setTimeout(() => {
+    modal.classList.add('active');
+  }, 10);
+}
+
+function closePreflight() {
+  const modal = document.getElementById('preflight-modal');
+  modal.classList.remove('active');
+  setTimeout(() => {
+    modal.style.display = 'none';
+  }, 300);
+}
+
+function renderPreflightSteps() {
+  const list = document.getElementById('preflight-steps-list');
+  const durLabel = document.getElementById('preflight-total-duration');
+  if (!list) return;
+
+  list.innerHTML = '';
+  let totalDur = 0;
+
+  preflightSteps.forEach((step, idx) => {
+    totalDur += step.duration;
+    
+    const div = document.createElement('div');
+    div.className = 'preflight-step-item';
+    div.innerHTML = `
+      <div style="display:grid; grid-template-columns:1.5fr 1fr; gap:0.5rem; width:100%;">
+        <div style="display:flex; flex-direction:column; gap:0.25rem;">
+          <input type="text" class="form-input" style="font-weight:600; padding:0.4rem 0.6rem; font-size:0.85rem;" value="${step.title}" id="pf-title-${idx}">
+          <input type="text" class="form-input" style="font-size:0.75rem; color:var(--text-secondary); padding:0.4rem 0.6rem;" value="${step.desc}" id="pf-desc-${idx}">
+        </div>
+        <div style="display:flex; align-items:center; gap:0.5rem; justify-content:flex-end;">
+          <input type="number" class="form-input" style="width:60px; padding:0.4rem 0.6rem; font-size:0.85rem; font-family:var(--font-mono); text-align:center;" value="${step.duration}" min="1" id="pf-dur-${idx}">
+          <span style="font-size:0.75rem; color:var(--text-muted); font-weight:600;">min</span>
+        </div>
+      </div>
+      <button class="btn-icon" style="width:32px; height:32px; color:var(--danger); border-color:transparent; background:var(--bg-surface-elevated);" title="Remove Step">
+        <svg viewBox="0 0 24 24" style="width:16px; height:16px; fill:none; stroke:currentColor; stroke-width:2.5;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    `;
+
+    // Bind change updates dynamically
+    div.querySelector(`#pf-title-${idx}`).addEventListener('input', (e) => {
+      preflightSteps[idx].title = e.target.value;
+    });
+    div.querySelector(`#pf-desc-${idx}`).addEventListener('input', (e) => {
+      preflightSteps[idx].desc = e.target.value;
+    });
+    div.querySelector(`#pf-dur-${idx}`).addEventListener('input', (e) => {
+      const val = parseInt(e.target.value) || 1;
+      preflightSteps[idx].duration = val;
+      
+      let sum = 0;
+      preflightSteps.forEach(s => {
+        s.time = sum === 0 ? "Start" : `+${sum} mins`;
+        sum += s.duration;
+      });
+
+      let elapsed = 0;
+      preflightSteps.forEach(s => elapsed += s.duration);
+      durLabel.textContent = `Total Duration: ${elapsed} mins`;
+    });
+
+    div.querySelector('button').addEventListener('click', () => {
+      preflightSteps.splice(idx, 1);
+      
+      let sum = 0;
+      preflightSteps.forEach(s => {
+        s.time = sum === 0 ? "Start" : `+${sum} mins`;
+        sum += s.duration;
+      });
+
+      renderPreflightSteps();
+    });
+
+    list.appendChild(div);
+  });
+
+  durLabel.textContent = `Total Duration: ${totalDur} mins`;
+}
+
+// 11. Offline Ambient Soundscapes Synthesizer (Web Audio API)
+function setupAmbientController() {
+  const toggle = document.getElementById('ambient-sound-toggle');
+  const selector = document.getElementById('ambient-sound-select');
+  const slider = document.getElementById('ambient-volume-slider');
+
+  if (!toggle) return;
+
+  toggle.addEventListener('change', () => {
+    initAudioContext();
+    if (toggle.checked) {
+      playAmbientSoundscape();
+    } else {
+      stopAmbientSoundscape();
+    }
+  });
+
+  selector.addEventListener('change', () => {
+    if (toggle.checked) {
+      playAmbientSoundscape();
+    }
+  });
+
+  slider.addEventListener('input', (e) => {
+    if (ambientGainNode && audioContext) {
+      ambientGainNode.gain.setValueAtTime(parseFloat(e.target.value) * 0.4, audioContext.currentTime);
+    }
+  });
+}
+
+function playAmbientSoundscape() {
+  initAudioContext();
+  if (!audioContext) return;
+
+  stopAmbientSoundscape(); // clear active soundscape
+  
+  ambientGainNode = audioContext.createGain();
+  const volumeSlider = document.getElementById('ambient-volume-slider');
+  const userVol = volumeSlider ? parseFloat(volumeSlider.value) : 0.5;
+  ambientGainNode.gain.setValueAtTime(userVol * 0.4, audioContext.currentTime);
+  ambientGainNode.connect(audioContext.destination);
+
+  const type = document.getElementById('ambient-sound-select').value;
+  if (type === 'brown') {
+    brownNoiseNode = createBrownNoiseNode();
+    brownNoiseNode.connect(ambientGainNode);
+  } else if (type === 'binaural') {
+    startBinauralBeats();
+  } else if (type === 'pulse') {
+    startCircadianPulse();
+  }
+  isAmbientPlaying = true;
+}
+
+function stopAmbientSoundscape() {
+  try {
+    if (brownNoiseNode) {
+      brownNoiseNode.disconnect();
+      brownNoiseNode = null;
+    }
+    if (binauralOscL) {
+      binauralOscL.stop();
+      binauralOscL.disconnect();
+      binauralOscL = null;
+    }
+    if (binauralOscR) {
+      binauralOscR.stop();
+      binauralOscR.disconnect();
+      binauralOscR = null;
+    }
+    if (pulseOsc) {
+      pulseOsc.stop();
+      pulseOsc.disconnect();
+      pulseOsc = null;
+    }
+    if (pulseLfo) {
+      pulseLfo.stop();
+      pulseLfo.disconnect();
+      pulseLfo = null;
+    }
+    if (ambientGainNode) {
+      ambientGainNode.disconnect();
+      ambientGainNode = null;
+    }
+  } catch (err) {
+    console.warn("Error stopping soundscape:", err);
+  }
+  isAmbientPlaying = false;
+}
+
+function createBrownNoiseNode() {
+  const bufferSize = 4096;
+  let lastOut = 0.0;
+  
+  const node = audioContext.createScriptProcessor(bufferSize, 0, 1);
+  node.onaudioprocess = (e) => {
+    const output = e.outputBuffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      const white = Math.random() * 2 - 1;
+      output[i] = (lastOut + (0.02 * white)) / 1.02;
+      lastOut = output[i];
+      output[i] *= 3.5;
+    }
+  };
+  return node;
+}
+
+function startBinauralBeats() {
+  binauralOscL = audioContext.createOscillator();
+  binauralOscR = audioContext.createOscillator();
+  
+  const pannerL = audioContext.createStereoPanner ? audioContext.createStereoPanner() : null;
+  const pannerR = audioContext.createStereoPanner ? audioContext.createStereoPanner() : null;
+  
+  binauralOscL.type = 'sine';
+  binauralOscL.frequency.setValueAtTime(200, audioContext.currentTime); // 200Hz L
+  
+  binauralOscR.type = 'sine';
+  binauralOscR.frequency.setValueAtTime(208, audioContext.currentTime); // 208Hz R (8Hz Detune)
+  
+  if (pannerL && pannerR) {
+    pannerL.pan.setValueAtTime(-1, audioContext.currentTime);
+    pannerR.pan.setValueAtTime(1, audioContext.currentTime);
+    
+    binauralOscL.connect(pannerL);
+    pannerL.connect(ambientGainNode);
+    
+    binauralOscR.connect(pannerR);
+    pannerR.connect(ambientGainNode);
+  } else {
+    binauralOscL.connect(ambientGainNode);
+    binauralOscR.connect(ambientGainNode);
+  }
+  
+  binauralOscL.start();
+  binauralOscR.start();
+}
+
+function startCircadianPulse() {
+  pulseOsc = audioContext.createOscillator();
+  pulseLfo = audioContext.createOscillator();
+  const lfoGain = audioContext.createGain();
+  
+  pulseOsc.type = 'triangle';
+  pulseOsc.frequency.setValueAtTime(110, audioContext.currentTime);
+  
+  pulseLfo.type = 'sine';
+  pulseLfo.frequency.setValueAtTime(0.2, audioContext.currentTime); // 5 second respiration swells
+  
+  lfoGain.gain.setValueAtTime(0.06, audioContext.currentTime);
+  
+  pulseLfo.connect(lfoGain);
+  lfoGain.connect(ambientGainNode.gain);
+  
+  pulseOsc.connect(ambientGainNode);
+  
+  pulseOsc.start();
+  pulseLfo.start();
 }

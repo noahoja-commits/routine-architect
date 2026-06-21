@@ -1,6 +1,29 @@
 import { facts, prebuiltRoutines } from './db.js';
 import { generateRoutine } from './generator.js';
 
+// Escape user-supplied strings before inserting via innerHTML (XSS guard)
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+// Minimal non-blocking toast (bottom-center pill, auto-dismiss)
+let _toastTimer = null;
+function showToast(msg) {
+  let toast = document.getElementById('app-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'app-toast';
+    toast.className = 'app-toast';
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-live', 'polite');
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.classList.add('visible');
+  if (_toastTimer) clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => {
+    toast.classList.remove('visible');
+  }, 2500);
+}
+
 // Application State Management
 let customRoutines = JSON.parse(localStorage.getItem('custom_routines')) || [];
 let completions = JSON.parse(localStorage.getItem('routine_completions')) || [];
@@ -36,6 +59,10 @@ let preflightRoutine = null;
 
 // Custom Builder State
 let creatorSteps = [];
+
+// Calendar view state (which month the tracker calendar is showing)
+let calendarViewYear = new Date().getFullYear();
+let calendarViewMonth = new Date().getMonth(); // 0-indexed
 
 // DOM Elements
 let navLinks, panels, prebuiltGrid, streakValues, themeDarkBtn, themeLightBtn, voiceToggle;
@@ -149,8 +176,10 @@ function switchPanel(panelId) {
   navLinks.forEach(link => {
     if (link.dataset.target === panelId) {
       link.classList.add('active');
+      link.setAttribute('aria-current', 'page');
     } else {
       link.classList.remove('active');
+      link.removeAttribute('aria-current');
     }
   });
 
@@ -202,26 +231,31 @@ function renderLibrary() {
     const card = document.createElement('div');
     card.className = 'card';
     
-    let svgIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>';
-    if (routine.icon === 'sunrise') {
-      svgIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 18a5 5 0 0 0-10 0M12 2v7M4.22 10.22l1.42 1.42M1M12 12h-3m13 0h-3M18.36 10.22l-1.42 1.42"></svg>';
-    } else if (routine.icon === 'code') {
-      svgIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>';
-    } else if (routine.icon === 'moon') {
-      svgIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
-    } else if (routine.icon === 'activity') {
-      svgIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>';
-    } else if (routine.icon === 'sparkles') {
-      svgIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v1M12 20v1M3 12h1M20 12h1M18.36 5.64l-.7.7M6.34 17.66l-.7.7M18.36 18.36l-.7-.7M6.34 6.34l-.7-.7M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>';
-    }
+    const iconMap = {
+      // Default clock
+      'clock': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>',
+      'sunrise': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a5 5 0 0 0-10 0"></path><line x1="12" y1="2" x2="12" y2="9"></line><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"></line><line x1="1" y1="18" x2="3" y2="18"></line><line x1="21" y1="18" x2="23" y2="18"></line><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"></line><line x1="23" y1="22" x2="1" y2="22"></line><polyline points="8 6 12 2 16 6"></polyline></svg>',
+      'code': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>',
+      'moon': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>',
+      'activity': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>',
+      'sparkles': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v1M12 20v1M3 12h1M20 12h1M18.36 5.64l-.7.7M6.34 17.66l-.7.7M18.36 18.36l-.7-.7M6.34 6.34l-.7-.7M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>',
+      // Keys emitted by the generator
+      'home': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>',
+      'heart': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>',
+      'book-open': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>',
+      'coffee': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg>',
+      'wind': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2"></path></svg>',
+      'dollar-sign': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>'
+    };
+    let svgIcon = iconMap[routine.icon] || iconMap['clock'];
 
     card.innerHTML = `
       <div class="card-icon">${svgIcon}</div>
-      <h3 class="card-title">${routine.title}</h3>
-      <p class="card-desc">${routine.description}</p>
-      
+      <h3 class="card-title">${escapeHtml(routine.title)}</h3>
+      <p class="card-desc">${escapeHtml(routine.description)}</p>
+
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.25rem;">
-        <span class="card-badge">${routine.category}</span>
+        <span class="card-badge">${escapeHtml(routine.category)}</span>
         <span style="font-family:var(--font-mono); font-size:0.8rem; color:var(--text-secondary); font-weight:600;">⏱️ ${routine.duration} mins</span>
       </div>
 
@@ -290,7 +324,7 @@ function setupGenerator() {
         generatorResult.style.display = 'block';
       } catch (err) {
         console.error(err);
-        alert("Failed to compile routine. Please try a simpler phrasing.");
+        showToast("Failed to compile routine. Please try a simpler phrasing.");
       }
     }, 1200);
   });
@@ -305,8 +339,8 @@ function setupGenerator() {
       stepCard.innerHTML = `
         <div class="step-time-badge">${step.duration} min</div>
         <div class="step-details">
-          <h4 class="step-title">${step.title}</h4>
-          <p class="step-desc">${step.desc}</p>
+          <h4 class="step-title">${escapeHtml(step.title)}</h4>
+          <p class="step-desc">${escapeHtml(step.desc)}</p>
           <div class="step-meta-row">
             <span>Timing: <strong>${step.time}</strong></span>
             <span class="step-fact-trigger" data-factkey="${step.factKey}">
@@ -388,7 +422,7 @@ function setupPlayer() {
 
 function loadRoutineIntoPlayer(routine) {
   if (!routine.steps || routine.steps.length === 0) {
-    alert("This routine has no steps to play.");
+    showToast("This routine has no steps to play.");
     return;
   }
   
@@ -499,6 +533,11 @@ function togglePlayPause() {
 }
 
 function tickTimer() {
+  // Guard against the timer firing after a reset cleared the active routine
+  if (!activeRoutine) {
+    clearInterval(timerInterval);
+    return;
+  }
   const remaining = Math.max(0, Math.round((timerEndTimestamp - Date.now()) / 1000));
   timerSecondsRemaining = remaining;
   
@@ -547,8 +586,8 @@ function completeActiveRoutine() {
   vibratePattern([200, 100, 200, 100, 300]); // Triumphant completion pattern
   
   logRoutineCompletion(activeRoutine);
-  alert(`Congratulations! You completed "${activeRoutine.title}"! Earned ${activeRoutine.duration * 10} XP.`);
-  
+  showToast(`Completed "${activeRoutine.title}" — earned ${activeRoutine.duration * 10} XP!`);
+
   resetPlayer();
   switchPanel('tracker');
 }
@@ -651,7 +690,7 @@ function renderPlayerTimeline() {
     node.className = `timeline-step-node ${stateClass}`;
     node.innerHTML = `
       <div class="timeline-indicator"></div>
-      <span class="timeline-step-text">${idx + 1}. ${step.title} (${step.duration} min)</span>
+      <span class="timeline-step-text">${idx + 1}. ${escapeHtml(step.title)} (${step.duration} min)</span>
     `;
 
     // Click to Jump directly to step
@@ -774,8 +813,8 @@ function updateTrackerUI() {
         logDiv.style.alignItems = 'center';
         logDiv.innerHTML = `
           <div>
-            <strong style="font-size:0.9rem;">${item.title}</strong>
-            <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.1rem;">Date: ${item.date}</div>
+            <strong style="font-size:0.9rem;">${escapeHtml(item.title)}</strong>
+            <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:0.1rem;">Date: ${escapeHtml(item.date)}</div>
           </div>
           <span class="card-badge" style="background:var(--accent-glow); color:var(--accent); font-size:0.65rem;">Score: ${item.score}%</span>
         `;
@@ -943,7 +982,7 @@ function toggleCompletionOnDate(dateStr) {
   today.setHours(23, 59, 59, 999);
   
   if (selectedDate > today) {
-    alert("Focus Error: You cannot record routine completions for future dates.");
+    showToast("You cannot record completions for future dates.");
     return;
   }
 
@@ -966,42 +1005,94 @@ function toggleCompletionOnDate(dateStr) {
   updateStreakDisplay();
 }
 
-function renderCalendarGridJune2026() {
+// Wire up Prev/Next month navigation buttons once
+let calendarNavWired = false;
+function setupCalendarNav() {
+  if (calendarNavWired) return;
+  const prevBtn = document.getElementById('calendar-prev-btn');
+  const nextBtn = document.getElementById('calendar-next-btn');
+  if (prevBtn) {
+    prevBtn.addEventListener('click', () => {
+      vibratePattern([40]);
+      calendarViewMonth--;
+      if (calendarViewMonth < 0) { calendarViewMonth = 11; calendarViewYear--; }
+      renderCalendarGrid();
+    });
+  }
+  if (nextBtn) {
+    nextBtn.addEventListener('click', () => {
+      vibratePattern([40]);
+      calendarViewMonth++;
+      if (calendarViewMonth > 11) { calendarViewMonth = 0; calendarViewYear++; }
+      renderCalendarGrid();
+    });
+  }
+  calendarNavWired = true;
+}
+
+function renderCalendarGrid() {
   const gridContainer = document.getElementById('calendar-days-grid');
   if (!gridContainer) return;
-  
-  const headerLabels = Array.from(gridContainer.children).slice(0, 7);
+
+  setupCalendarNav();
+
+  const year = calendarViewYear;
+  const month = calendarViewMonth; // 0-indexed
+
+  // Update the month/year label
+  const monthLabel = document.getElementById('calendar-month-name');
+  if (monthLabel) {
+    monthLabel.textContent = new Date(year, month, 1).toLocaleDateString('en-US', {
+      month: 'long', year: 'numeric'
+    });
+  }
+
+  // Preserve the weekday header labels (first 7 children)
+  const headerLabels = Array.from(gridContainer.children).filter(el => el.classList && el.classList.contains('calendar-day-label'));
   gridContainer.innerHTML = '';
   headerLabels.forEach(hl => gridContainer.appendChild(hl));
-  
-  for (let i = 0; i < 1; i++) {
+
+  const firstWeekday = new Date(year, month, 1).getDay(); // 0=Sun .. 6=Sat
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  // Leading blank cells so day 1 lands on the correct weekday
+  for (let i = 0; i < firstWeekday; i++) {
     const emptyDay = document.createElement('div');
     emptyDay.className = 'calendar-day inactive';
     gridContainer.appendChild(emptyDay);
   }
-  
+
   const completedDates = completions.map(c => c.date);
-  
-  for (let dayNum = 1; dayNum <= 30; dayNum++) {
-    const dayStr = `2026-06-${dayNum.toString().padStart(2, '0')}`;
+  const now = new Date();
+  const isCurrentMonth = (now.getFullYear() === year && now.getMonth() === month);
+  const todayNum = now.getDate();
+
+  for (let dayNum = 1; dayNum <= daysInMonth; dayNum++) {
+    const dayStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${dayNum.toString().padStart(2, '0')}`;
     const isCompleted = completedDates.includes(dayStr);
-    
+    const isToday = isCurrentMonth && dayNum === todayNum;
+
     const dayDiv = document.createElement('div');
-    dayDiv.className = `calendar-day ${isCompleted ? 'completed' : ''}`;
+    dayDiv.className = `calendar-day ${isCompleted ? 'completed' : ''} ${isToday ? 'today' : ''}`.trim();
     dayDiv.style.cursor = 'pointer';
     dayDiv.dataset.date = dayStr;
-    
+
     dayDiv.innerHTML = `
       <span>${dayNum}</span>
       ${isCompleted ? '<div class="calendar-day-dot"></div>' : ''}
     `;
-    
+
     dayDiv.addEventListener('click', () => {
       toggleCompletionOnDate(dayStr);
     });
-    
+
     gridContainer.appendChild(dayDiv);
   }
+}
+
+// Backwards-compatible alias for the original call site
+function renderCalendarGridJune2026() {
+  renderCalendarGrid();
 }
 
 function renderWeeklyComplianceChart() {
@@ -1074,11 +1165,11 @@ function setupCreator() {
     const sDesc = descInput.value.trim();
     
     if (!sTitle) {
-      alert("Please enter a step title.");
+      showToast("Please enter a step title.");
       return;
     }
     if (sDur <= 0 || isNaN(sDur)) {
-      alert("Please enter a valid positive duration.");
+      showToast("Please enter a valid positive duration.");
       return;
     }
 
@@ -1122,7 +1213,7 @@ function setupCreator() {
       row.className = 'builder-step-row';
       row.innerHTML = `
         <div class="builder-step-details">
-          <div class="builder-step-title">${idx + 1}. ${step.title} (${step.duration} mins)</div>
+          <div class="builder-step-title">${idx + 1}. ${escapeHtml(step.title)} (${step.duration} mins)</div>
           <div class="builder-step-meta">Timing: ${step.time} | Fact: <strong>${facts[step.factKey] ? facts[step.factKey].title : 'Default Performance'}</strong></div>
         </div>
         <button class="btn-icon" style="width:32px; height:32px; color:var(--danger); border-color:transparent;" title="Remove Step">
@@ -1155,7 +1246,7 @@ function setupCreator() {
     const rDiff = document.getElementById('creator-difficulty').value;
     
     if (creatorSteps.length === 0) {
-      alert("Validation Error: Please add at least one step to build a routine.");
+      showToast("Please add at least one step to build a routine.");
       return;
     }
 
@@ -1186,7 +1277,7 @@ function setupCreator() {
     renderCreatorSteps();
     renderLibrary();
     
-    alert(`Success! Your custom routine "${rTitle}" has been saved to the library.`);
+    showToast(`Saved "${rTitle}" to your library.`);
     switchPanel('dashboard');
   });
 }
@@ -1254,12 +1345,12 @@ function setupBackupRestore() {
           updateStreakDisplay();
           updateLevelingUI();
 
-          alert("Vault restored successfully! Data updated.");
+          showToast("Vault restored successfully! Data updated.");
         } else {
-          alert("Restore Failed: Invalid backup format. Missing core dataset arrays.");
+          showToast("Restore failed: invalid backup format.");
         }
       } catch (err) {
-        alert("Restore Failed: Error parsing file. Ensure it is a valid JSON file.");
+        showToast("Restore failed: could not parse file. Ensure it is valid JSON.");
       }
     };
     reader.readAsText(file);
@@ -1281,6 +1372,7 @@ function setupFactExplorer() {
     modal.style.display = 'flex';
     setTimeout(() => {
       modal.classList.add('active');
+      searchInput.focus(); // focus first control on open
     }, 10);
     renderExplorerList("");
   });
@@ -1288,6 +1380,9 @@ function setupFactExplorer() {
   closeBtn.addEventListener('click', closeModal);
   modal.addEventListener('click', (e) => {
     if (e.target === modal) closeModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal.classList.contains('active')) closeModal();
   });
 
   searchInput.addEventListener('input', (e) => {
@@ -1346,6 +1441,9 @@ function setupPreflightAdjuster() {
   modal.addEventListener('click', (e) => {
     if (e.target === modal) closePreflight();
   });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal.classList.contains('active')) closePreflight();
+  });
 
   addStepBtn.addEventListener('click', () => {
     vibratePattern([40]);
@@ -1362,7 +1460,7 @@ function setupPreflightAdjuster() {
   launchBtn.addEventListener('click', () => {
     vibratePattern([70]);
     if (preflightSteps.length === 0) {
-      alert("Please add at least one step to launch.");
+      showToast("Please add at least one step to launch.");
       return;
     }
     closePreflight();
@@ -1395,6 +1493,9 @@ function openPreflightAdjuster(routine) {
   modal.style.display = 'flex';
   setTimeout(() => {
     modal.classList.add('active');
+    // Focus the first control in the dialog for keyboard users
+    const firstControl = modal.querySelector('input, button, select, textarea');
+    if (firstControl) firstControl.focus();
   }, 10);
 }
 
@@ -1422,8 +1523,8 @@ function renderPreflightSteps() {
     div.innerHTML = `
       <div style="display:grid; grid-template-columns:1.5fr 1fr; gap:0.5rem; width:100%;">
         <div style="display:flex; flex-direction:column; gap:0.25rem;">
-          <input type="text" class="form-input" style="font-weight:600; padding:0.4rem 0.6rem; font-size:0.85rem;" value="${step.title}" id="pf-title-${idx}">
-          <input type="text" class="form-input" style="font-size:0.75rem; color:var(--text-secondary); padding:0.4rem 0.6rem;" value="${step.desc}" id="pf-desc-${idx}">
+          <input type="text" class="form-input" style="font-weight:600; padding:0.4rem 0.6rem; font-size:0.85rem;" value="${escapeHtml(step.title)}" id="pf-title-${idx}">
+          <input type="text" class="form-input" style="font-size:0.75rem; color:var(--text-secondary); padding:0.4rem 0.6rem;" value="${escapeHtml(step.desc)}" id="pf-desc-${idx}">
         </div>
         <div style="display:flex; align-items:center; gap:0.5rem; justify-content:flex-end;">
           <input type="number" class="form-input" style="width:60px; padding:0.4rem 0.6rem; font-size:0.85rem; font-family:var(--font-mono); text-align:center;" value="${step.duration}" min="1" id="pf-dur-${idx}">

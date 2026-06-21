@@ -1679,6 +1679,73 @@ body {
   to { transform: translateY(0); opacity: 1; }
 }
 
+/* Toast Notification (replaces blocking alerts) */
+.app-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(80px + env(safe-area-inset-bottom));
+  transform: translateX(-50%) translateY(20px);
+  background: var(--bg-surface-elevated, #1e1e22);
+  color: var(--text-primary, #fff);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 0.7rem 1.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  max-width: 90vw;
+  text-align: center;
+  box-shadow: var(--shadow-lg, 0 10px 30px rgba(0,0,0,0.4));
+  z-index: 400;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.app-toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Calendar month-nav buttons + today highlight */
+.calendar-nav-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.calendar-day.today {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  font-weight: 800;
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .timer-circle-progress {
+    transition: none !important;
+  }
+  #timer-progress-ring {
+    transition: none !important;
+  }
+  .equalizer-bar,
+  .timeline-step-node.active .timeline-indicator {
+    animation: none !important;
+  }
+}
+
 /* Viewport Adjustments for Screens Under 375px */
 @media (max-width: 375px) {
   .main-content {

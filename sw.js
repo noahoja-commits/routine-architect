@@ -1,4 +1,4 @@
-const CACHE_NAME = 'routine-architect-v5';
+const CACHE_NAME = 'routine-architect-v6';
 const ASSETS = [
   './',
   './index.html',
@@ -7,7 +7,9 @@ const ASSETS = [
   './db.js',
   './generator.js',
   './manifest.json',
-  './icon-512.png'
+  './icon-192.png',
+  './icon-512.png',
+  './apple-touch-icon.png'
 ];
 
 // Install Service Worker
@@ -15,7 +17,14 @@ self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       console.log('[Service Worker] Caching offline assets...');
-      return cache.addAll(ASSETS);
+      // Resilient precache: don't let one missing asset abort the whole install
+      return Promise.all(
+        ASSETS.map((asset) =>
+          cache.add(asset).catch((err) => {
+            console.warn('[Service Worker] Failed to cache asset:', asset, err);
+          })
+        )
+      );
     })
   );
   self.skipWaiting();

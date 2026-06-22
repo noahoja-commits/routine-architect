@@ -70,6 +70,12 @@
               </a>
             </li>
             <li class="nav-item">
+              <a class="nav-link" data-target="planner">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                <span>Plan</span>
+              </a>
+            </li>
+            <li class="nav-item">
               <a class="nav-link" data-target="tracker">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
                 <span>Habit Tracker</span>
@@ -470,6 +476,74 @@
         </div>
       </section>
       
+      <!-- Panel: Plan (Templates · Weekly Schedule · Reminders) -->
+      <section class="view-panel" id="panel-planner">
+        <div class="panel-header">
+          <h1 class="panel-title">Plan Your Week</h1>
+          <p class="panel-subtitle">Load a science-backed template, lay routines across the week with time slots, and set local reminders.</p>
+        </div>
+
+        <!-- Templates Library -->
+        <h2 style="font-family:var(--font-display); font-weight:700; font-size:1.25rem; margin-bottom:1rem; display:flex; align-items:center; gap:0.5rem;">📚 Starter Templates</h2>
+        <p style="color:var(--text-secondary); font-size:0.85rem; margin-bottom:1.25rem; max-width:680px;">Evidence-based routines you can load into the customizer and tweak, or drop straight onto your weekly schedule.</p>
+        <div class="library-grid" id="templates-grid" style="margin-bottom:2.5rem;">
+          <!-- Populated dynamically -->
+        </div>
+
+        <!-- Reminders -->
+        <div class="card" style="margin-bottom:2rem; display:flex; justify-content:space-between; align-items:center; gap:1rem; flex-wrap:wrap;">
+          <div>
+            <h3 style="font-family:var(--font-display); font-weight:700; font-size:1.1rem; display:flex; align-items:center; gap:0.5rem;">🔔 Step Reminders</h3>
+            <p id="reminders-status" style="color:var(--text-secondary); font-size:0.8rem; margin-top:0.3rem; max-width:520px;">Off — enable to get step-time reminders (this tab must stay open).</p>
+          </div>
+          <label class="switch-label" style="position:relative; display:inline-block; width:48px; height:24px; cursor:pointer; flex-shrink:0;">
+            <input type="checkbox" id="reminders-toggle" style="opacity:0; width:0; height:0;">
+            <span class="switch-slider" style="position:absolute; top:0; left:0; right:0; bottom:0; background-color:var(--border-color-hover); border-radius:34px; transition:0.3s;"></span>
+          </label>
+        </div>
+
+        <!-- Schedule builder -->
+        <div class="card" id="schedule-form-card" style="margin-bottom:1.5rem;">
+          <h3 style="font-family:var(--font-display); font-weight:700; font-size:1.15rem; margin-bottom:1rem; border-bottom:1px solid var(--border-color); padding-bottom:0.5rem;">Add to Weekly Schedule</h3>
+          <div class="schedule-form-row">
+            <div class="option-group">
+              <label class="option-label" for="schedule-routine-select">Routine</label>
+              <select class="option-select" id="schedule-routine-select"></select>
+            </div>
+            <div class="option-group">
+              <label class="option-label" for="schedule-day-select">Day</label>
+              <select class="option-select" id="schedule-day-select">
+                <option value="1">Monday</option>
+                <option value="2">Tuesday</option>
+                <option value="3">Wednesday</option>
+                <option value="4">Thursday</option>
+                <option value="5">Friday</option>
+                <option value="6">Saturday</option>
+                <option value="0">Sunday</option>
+              </select>
+            </div>
+            <div class="option-group">
+              <label class="option-label" for="schedule-time-input">Start Time</label>
+              <input class="form-input" type="time" id="schedule-time-input" value="07:00">
+            </div>
+            <div class="option-group" style="justify-content:flex-end;">
+              <label class="option-label" style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;">
+                <input type="checkbox" id="schedule-reminder-check" style="accent-color:var(--primary);"> Remind me
+              </label>
+              <button class="btn-primary" id="schedule-add-btn" style="padding:0.6rem 1rem; margin-top:0.4rem;">+ Add</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Weekly grid -->
+        <h3 style="font-family:var(--font-display); font-weight:700; font-size:1.15rem; margin-bottom:1rem; display:flex; align-items:center; gap:0.5rem;">🗓️ This Week</h3>
+        <div class="weekly-schedule-scroll">
+          <div class="weekly-schedule-grid" id="weekly-schedule-grid">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </section>
+
       <!-- Panel 5: Habit Tracker -->
       <section class="view-panel" id="panel-tracker">
         <div class="panel-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem;">
@@ -507,6 +581,61 @@
           <div class="tracker-stat-card">
             <div class="tracker-stat-val" id="stats-avg-score">0%</div>
             <div class="tracker-stat-lbl">Avg Scientific Score</div>
+          </div>
+        </div>
+
+        <!-- Today's Step Checklist -->
+        <div class="card" style="margin-bottom:1.5rem;">
+          <h3 style="font-family:var(--font-display); font-weight:700; font-size:1.15rem; margin-bottom:1rem; border-bottom:1px solid var(--border-color); padding-bottom:0.5rem; display:flex; align-items:center; gap:0.5rem;">
+            ✅ Today's Steps
+          </h3>
+          <div id="today-step-checklist"><!-- Populated dynamically --></div>
+        </div>
+
+        <!-- GitHub-style Year Heatmap -->
+        <div class="card" style="margin-bottom:1.5rem;">
+          <h3 style="font-family:var(--font-display); font-weight:700; font-size:1.15rem; margin-bottom:1rem; border-bottom:1px solid var(--border-color); padding-bottom:0.5rem; display:flex; align-items:center; gap:0.5rem;">
+            🔥 Activity Heatmap <span style="font-size:0.75rem; color:var(--text-muted); font-weight:500;">(last 12 months)</span>
+          </h3>
+          <div style="overflow-x:auto;"><div id="year-heatmap"></div></div>
+          <div class="heatmap-legend">
+            <span>Less</span>
+            <span class="hm-swatch hm-l0"></span>
+            <span class="hm-swatch hm-l1"></span>
+            <span class="hm-swatch hm-l2"></span>
+            <span class="hm-swatch hm-l3"></span>
+            <span class="hm-swatch hm-l4"></span>
+            <span>More</span>
+          </div>
+        </div>
+
+        <!-- Progress Insights -->
+        <div class="card" style="margin-bottom:1.5rem;">
+          <h3 style="font-family:var(--font-display); font-weight:700; font-size:1.15rem; margin-bottom:1rem; border-bottom:1px solid var(--border-color); padding-bottom:0.5rem; display:flex; align-items:center; gap:0.5rem;">
+            🧠 Progress Insights
+          </h3>
+          <div class="insights-grid">
+            <div class="insight-box">
+              <div class="insight-label">30-Day Completion Rate</div>
+              <div class="insight-big" id="insight-rate-val">0%</div>
+              <div class="stat-progress-bg" style="height:8px; margin-top:0.5rem;">
+                <div class="stat-progress-bar" id="insight-rate-bar" style="background:linear-gradient(90deg,var(--primary),var(--accent)); width:0%;"></div>
+              </div>
+            </div>
+            <div class="insight-box">
+              <div class="insight-label">Most Consistent On</div>
+              <div class="insight-big" id="insight-best-day" style="color:var(--accent);">—</div>
+            </div>
+            <div class="insight-box">
+              <div class="insight-label">Best Adhered Step</div>
+              <div class="insight-text" id="insight-best-step" style="color:var(--success);">No step data yet</div>
+              <div class="insight-label" style="margin-top:0.75rem;">Needs Work</div>
+              <div class="insight-text" id="insight-worst-step" style="color:var(--warning);">Check off steps to build insights</div>
+            </div>
+            <div class="insight-box">
+              <div class="insight-label">14-Day Trend</div>
+              <div class="sparkline" id="insight-sparkline"></div>
+            </div>
           </div>
         </div>
 

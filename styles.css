@@ -1790,3 +1790,212 @@ body {
 }
 
 
+
+/* ============================================================================
+   PLANNER + TRACKER EXTRAS (Templates · Weekly Schedule · Reminders ·
+   Year Heatmap · Progress Insights · Today Checklist)
+============================================================================ */
+
+/* Schedule builder form */
+.schedule-form-row {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 1fr auto;
+  gap: 1rem;
+  align-items: end;
+}
+.schedule-form-row .option-group { display: flex; flex-direction: column; gap: 0.4rem; }
+
+/* Weekly schedule grid */
+.weekly-schedule-scroll { overflow-x: auto; padding-bottom: 0.5rem; }
+.weekly-schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(120px, 1fr));
+  gap: 0.6rem;
+  min-width: 760px;
+}
+.sched-col {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.5rem;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.sched-col-today { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary-glow); }
+.sched-col-head {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.35rem;
+}
+.sched-col-date {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  background: var(--bg-surface-elevated);
+  border-radius: var(--radius-sm);
+  padding: 0.05rem 0.35rem;
+}
+.sched-empty { color: var(--text-muted); font-size: 0.85rem; text-align: center; padding: 1rem 0; }
+.sched-block {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--radius-sm);
+  padding: 0.45rem 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.sched-block.sched-done { border-left-color: var(--success); opacity: 0.75; }
+.sched-time { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-secondary); font-weight: 600; }
+.sched-title { font-size: 0.82rem; font-weight: 600; line-height: 1.25; }
+.sched-actions { display: flex; justify-content: space-between; align-items: center; gap: 0.4rem; }
+.sched-toggle {
+  background: var(--primary-glow);
+  color: var(--primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+}
+.sched-block.sched-done .sched-toggle { background: rgba(16,185,129,0.15); color: var(--success); }
+.sched-remove {
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+.sched-remove:hover { color: var(--danger); }
+
+/* GitHub-style heatmap */
+.hm-cell { stroke: rgba(255,255,255,0.02); }
+.hm-l0 { fill: var(--bg-surface-elevated); }
+.hm-l1 { fill: rgba(20,184,166,0.35); }
+.hm-l2 { fill: rgba(20,184,166,0.6); }
+.hm-l3 { fill: rgba(20,184,166,0.82); }
+.hm-l4 { fill: var(--accent); }
+.hm-month { fill: var(--text-muted); font-size: 8px; font-family: var(--font-sans); }
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  justify-content: flex-end;
+  margin-top: 0.6rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+.hm-swatch { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
+.hm-swatch.hm-l0 { background: var(--bg-surface-elevated); }
+.hm-swatch.hm-l1 { background: rgba(20,184,166,0.35); }
+.hm-swatch.hm-l2 { background: rgba(20,184,166,0.6); }
+.hm-swatch.hm-l3 { background: rgba(20,184,166,0.82); }
+.hm-swatch.hm-l4 { background: var(--accent); }
+
+/* Progress insights */
+.insights-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+.insight-box {
+  background: var(--bg-surface-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+}
+.insight-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 0.4rem;
+}
+.insight-big { font-family: var(--font-display); font-weight: 800; font-size: 1.6rem; }
+.insight-text { font-size: 0.9rem; font-weight: 600; line-height: 1.3; }
+.sparkline {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 56px;
+  margin-top: 0.3rem;
+}
+.spark-bar {
+  flex: 1;
+  background: linear-gradient(180deg, var(--primary), var(--accent));
+  border-radius: 2px 2px 0 0;
+  min-height: 4px;
+}
+
+/* Today checklist */
+.today-routine { margin-bottom: 1.25rem; }
+.today-routine:last-child { margin-bottom: 0; }
+.today-routine-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin-bottom: 0.5rem;
+}
+.today-progress {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent);
+  background: var(--accent-glow);
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+.today-step {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.4rem;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.today-step:hover { border-color: var(--border-color-hover); }
+.today-step input { display: none; }
+.today-step-box {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-color-hover);
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  color: transparent;
+  flex-shrink: 0;
+}
+.today-step.checked { background: var(--accent-glow); border-color: var(--accent); }
+.today-step.checked .today-step-box { background: var(--accent); border-color: var(--accent); color: #fff; }
+.today-step.checked .today-step-text { text-decoration: line-through; color: var(--text-muted); }
+.today-step-text { font-size: 0.88rem; }
+
+@media (max-width: 768px) {
+  .schedule-form-row { grid-template-columns: 1fr 1fr; }
+  .insights-grid { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 375px) {
+  .schedule-form-row { grid-template-columns: 1fr; }
+  .insights-grid { grid-template-columns: 1fr; }
+}

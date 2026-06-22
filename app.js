@@ -87,6 +87,8 @@ function init() {
   setupFactExplorer();
   setupPreflightAdjuster();
   setupAmbientController();
+  setupPlanner();          // Templates + Weekly Schedule + Reminders
+  setupTrackerExtras();    // Year heatmap + deep analytics + today step checklist
   updateStreakDisplay();
   updateLevelingUI();
   loadDailyScienceFact();
@@ -97,7 +99,10 @@ function init() {
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', init);
 } else {
-  init();
+  // Defer to a macrotask so the rest of this module (later top-level `let`
+  // declarations like calendarNavWired/schedule/stepLog) finishes evaluating
+  // first — calling init() synchronously here hits a Temporal Dead Zone.
+  setTimeout(init, 0);
 }
 
 // Helper to initialize and resume Web Audio Context safely
@@ -826,6 +831,7 @@ function updateTrackerUI() {
   renderCalendarGridJune2026();
   renderWeeklyComplianceChart();
   renderCategoryDonutChart();
+  if (typeof renderTrackerExtras === 'function') renderTrackerExtras();
 }
 
 // Game Progression Engine
@@ -1090,6 +1096,50 @@ function renderCalendarGrid() {
   }
 }
 
+// Recompute current + longest streak from the full set of completion dates.
+// (Previously referenced but never defined — toggling a calendar day threw.)
+function recalculateAllStreaks() {
+  const uniqueDates = [...new Set(completions.map(c => c.date))].sort(); // ascending YYYY-MM-DD
+  if (uniqueDates.length === 0) {
+    userStreak = 0;
+    userLongestStreak = 0;
+    lastCompletionDate = "";
+  } else {
+    // Longest run of consecutive calendar days anywhere in the history
+    let longest = 1, run = 1;
+    for (let i = 1; i < uniqueDates.length; i++) {
+      const prev = new Date(uniqueDates[i - 1] + "T00:00:00");
+      const cur = new Date(uniqueDates[i] + "T00:00:00");
+      const diffDays = Math.round((cur - prev) / 86400000);
+      run = diffDays === 1 ? run + 1 : 1;
+      if (run > longest) longest = run;
+    }
+    userLongestStreak = Math.max(longest, userLongestStreak);
+
+    // Current streak: consecutive days ending today or yesterday
+    const todayStr = new Date().toISOString().split('T')[0];
+    const yesterdayStr = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+    const dateSet = new Set(uniqueDates);
+    lastCompletionDate = uniqueDates[uniqueDates.length - 1];
+
+    if (dateSet.has(todayStr) || dateSet.has(yesterdayStr)) {
+      let cur = dateSet.has(todayStr) ? new Date(todayStr + "T00:00:00") : new Date(yesterdayStr + "T00:00:00");
+      let streak = 0;
+      while (dateSet.has(cur.toISOString().split('T')[0])) {
+        streak++;
+        cur = new Date(cur.getTime() - 86400000);
+      }
+      userStreak = streak;
+    } else {
+      userStreak = 0;
+    }
+  }
+
+  localStorage.setItem('user_streak', userStreak.toString());
+  localStorage.setItem('user_longest_streak', userLongestStreak.toString());
+  localStorage.setItem('last_completion_date', lastCompletionDate);
+}
+
 // Backwards-compatible alias for the original call site
 function renderCalendarGridJune2026() {
   renderCalendarGrid();
@@ -1276,7 +1326,8 @@ function setupCreator() {
     creatorSteps = [];
     renderCreatorSteps();
     renderLibrary();
-    
+    if (typeof refreshScheduleRoutineOptions === 'function') refreshScheduleRoutineOptions();
+
     showToast(`Saved "${rTitle}" to your library.`);
     switchPanel('dashboard');
   });
@@ -1297,7 +1348,10 @@ function setupBackupRestore() {
       userStreak,
       userLongestStreak,
       lastCompletionDate,
-      userXP // Backup XP as well
+      userXP, // Backup XP as well
+      schedule,
+      stepLog,
+      remindersEnabled
     };
 
     const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -1340,10 +1394,22 @@ function setupBackupRestore() {
           lastCompletionDate = data.lastCompletionDate || "";
           userXP = parseInt(data.userXP) || 0;
 
+          if (Array.isArray(data.schedule)) {
+            schedule = data.schedule;
+            localStorage.setItem('ra_schedule', JSON.stringify(schedule));
+          }
+          if (data.stepLog && typeof data.stepLog === 'object') {
+            stepLog = data.stepLog;
+            localStorage.setItem('ra_step_log', JSON.stringify(stepLog));
+          }
+          if (typeof renderSchedule === 'function') renderSchedule();
+          if (typeof renderTrackerExtras === 'function') renderTrackerExtras();
+
           renderLibrary();
           updateTrackerUI();
           updateStreakDisplay();
           updateLevelingUI();
+          if (typeof refreshScheduleRoutineOptions === 'function') refreshScheduleRoutineOptions();
 
           showToast("Vault restored successfully! Data updated.");
         } else {
@@ -1739,7 +1805,547 @@ function startCircadianPulse() {
   lfoGain.connect(ambientGainNode.gain);
   
   pulseOsc.connect(ambientGainNode);
-  
+
   pulseOsc.start();
   pulseLfo.start();
+}
+
+/* ============================================================================
+   12. PLANNER: Templates · Weekly Schedule · Reminders
+   13. TRACKER EXTRAS: Year Heatmap · Deep Analytics · Today Step Checklist
+   All client-side, localStorage-persisted, offline-safe. Reuses facts,
+   prebuiltRoutines, customRoutines, openPreflightAdjuster, logRoutineCompletion.
+============================================================================ */
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// --- Persisted feature state ---------------------------------------------
+// schedule: [{ id, routineId, title, day (0-6), time "HH:MM", reminder (bool) }]
+let schedule = JSON.parse(localStorage.getItem('ra_schedule')) || [];
+// stepLog: { "YYYY-MM-DD": { "routineId": [bool, bool, ...] } }
+let stepLog = JSON.parse(localStorage.getItem('ra_step_log')) || {};
+let remindersEnabled = localStorage.getItem('ra_reminders_enabled') === 'true';
+let firedReminders = JSON.parse(localStorage.getItem('ra_reminder_fired')) || {}; // { "YYYY-MM-DD|id": true }
+
+function saveSchedule() { localStorage.setItem('ra_schedule', JSON.stringify(schedule)); }
+function saveStepLog() { localStorage.setItem('ra_step_log', JSON.stringify(stepLog)); }
+
+function allRoutines() { return [...prebuiltRoutines, ...customRoutines]; }
+function findRoutine(id) { return allRoutines().find(r => r.id === id); }
+function todayKey() { return new Date().toISOString().split('T')[0]; }
+function dateKey(d) { return d.toISOString().split('T')[0]; }
+
+// Science-backed starter templates (loadable + customizable via the Pre-flight adjuster)
+const ROUTINE_TEMPLATES = [
+  {
+    id: 'tmpl_morning', icon: 'sunrise', category: 'Morning & Wakeup', difficulty: 'Medium', duration: 35,
+    title: 'Circadian Morning Primer',
+    description: 'Anchor your body clock: hydrate, get sunlight, move, and set intentions to ride the morning cortisol peak.',
+    stats: { scientificScore: 97, focusRequired: 45, physicalIntensity: 35 },
+    steps: [
+      { time: 'Start', duration: 5, title: 'Rehydrate (500ml)', desc: 'Drink 500ml of water to clear adenosine and offset overnight dehydration.', factKey: 'hydration', subfacts: [] },
+      { time: '+5 mins', duration: 10, title: 'Morning Sunlight', desc: 'Get 10 minutes of outdoor light (no sunglasses) to set your circadian timer.', factKey: 'light_exposure', subfacts: [] },
+      { time: '+15 mins', duration: 10, title: 'Dynamic Mobility', desc: 'Light movement to raise core temperature and signal wakefulness.', factKey: 'strength_warmup', subfacts: [] },
+      { time: '+25 mins', duration: 10, title: 'Intentions & Offload', desc: 'Write your 3 primary targets for the day to free working memory.', factKey: 'journaling', subfacts: [] }
+    ]
+  },
+  {
+    id: 'tmpl_deepwork', icon: 'code', category: 'Productivity & Tech', difficulty: 'Hard', duration: 120,
+    title: 'Deep Work Ultradian Block',
+    description: 'Two focused sprints separated by a diffuse-mode break — matched to your brain\'s 90-minute cycles.',
+    stats: { scientificScore: 95, focusRequired: 92, physicalIntensity: 8 },
+    steps: [
+      { time: 'Start', duration: 10, title: 'Workspace Sanitize', desc: 'Clear clutter and open only what the task needs.', factKey: 'clean_environment', subfacts: [] },
+      { time: '+10 mins', duration: 50, title: 'Focus Sprint A', desc: 'Single hardest task. Phone in another room, notifications off.', factKey: 'pomodoro', subfacts: [] },
+      { time: '+60 mins', duration: 10, title: 'Diffuse Break', desc: 'Walk away from screens; let diffuse mode solve what focus could not.', factKey: 'diffuse_thinking', subfacts: [] },
+      { time: '+70 mins', duration: 50, title: 'Focus Sprint B', desc: 'Resume implementation. Outline blockers on paper before clicking around.', factKey: 'pomodoro', subfacts: [] }
+    ]
+  },
+  {
+    id: 'tmpl_winddown', icon: 'moon', category: 'Health & Sleep', difficulty: 'Easy', duration: 45,
+    title: 'Evening Wind-Down',
+    description: 'Lower light, core temperature, and cognitive load to fall asleep faster and reach deeper sleep.',
+    stats: { scientificScore: 98, focusRequired: 15, physicalIntensity: 10 },
+    steps: [
+      { time: 'Start', duration: 15, title: 'Digital Sunset', desc: 'Kill overhead lights, switch to amber lamps, phone out of reach.', factKey: 'blue_light_block', subfacts: [] },
+      { time: '+15 mins', duration: 10, title: 'Brain Dump', desc: 'Write tomorrow\'s plan + anything on your mind so you stop rehearsing it.', factKey: 'journaling', subfacts: [] },
+      { time: '+25 mins', duration: 20, title: 'Warm Shower + Breathing', desc: 'Warm shower then slow physiological sighs to drop core temp and calm the vagus nerve.', factKey: 'mindfulness_meditation', subfacts: [] }
+    ]
+  },
+  {
+    id: 'tmpl_exercise', icon: 'activity', category: 'Fitness & Wellness', difficulty: 'Hard', duration: 60,
+    title: 'Strength + Recovery Session',
+    description: 'Prime the nervous system, train with progressive overload, then refuel for muscle protein synthesis.',
+    stats: { scientificScore: 96, focusRequired: 60, physicalIntensity: 90 },
+    steps: [
+      { time: 'Start', duration: 10, title: 'Dynamic Warmup', desc: 'Light cardio + movement prep to raise muscle temperature and prime the CNS.', factKey: 'strength_warmup', subfacts: [] },
+      { time: '+10 mins', duration: 35, title: 'Progressive Overload Lifts', desc: 'Compound movements, sets within 1-3 reps of failure. Log weight + reps.', factKey: 'strength_hypertrophy', subfacts: [] },
+      { time: '+45 mins', duration: 5, title: 'Cool-Down Breathing', desc: 'Slow diaphragmatic breathing to shift from sympathetic to parasympathetic.', factKey: 'mindfulness_meditation', subfacts: [] },
+      { time: '+50 mins', duration: 10, title: 'Protein Refuel', desc: 'Consume 30-40g protein to drive muscle protein synthesis and recovery.', factKey: 'nutrition_protein', subfacts: [] }
+    ]
+  }
+];
+
+// ---------------------------------------------------------------------------
+// PLANNER SETUP
+// ---------------------------------------------------------------------------
+function setupPlanner() {
+  if (!document.getElementById('panel-planner')) return;
+  renderTemplates();
+  setupScheduleForm();
+  renderSchedule();
+  setupReminderToggle();
+
+  // Reminder polling (only while tab is open — no push server, by design)
+  setInterval(checkReminders, 30000);
+  setTimeout(checkReminders, 3000);
+}
+
+function renderTemplates() {
+  const grid = document.getElementById('templates-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  ROUTINE_TEMPLATES.forEach(t => {
+    const card = document.createElement('div');
+    card.className = 'card template-card';
+    card.innerHTML = `
+      <h3 class="card-title" style="font-size:1.1rem;">${escapeHtml(t.title)}</h3>
+      <p class="card-desc">${escapeHtml(t.description)}</p>
+      <div style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:1rem;">
+        <span class="card-badge">${escapeHtml(t.category)}</span>
+        <span class="card-badge" style="background:var(--bg-surface-elevated); color:var(--text-secondary);">⏱️ ${t.duration} min</span>
+        <span class="card-badge" style="background:var(--accent-glow); color:var(--accent);">${t.stats.scientificScore}% Valid</span>
+      </div>
+      <div style="display:flex; gap:0.5rem;">
+        <button class="btn-primary template-load-btn" style="flex:1; padding:0.55rem;">Load & Customize</button>
+        <button class="btn-secondary template-sched-btn" style="padding:0.55rem 0.8rem;" title="Add to weekly schedule">📅</button>
+      </div>
+    `;
+    card.querySelector('.template-load-btn').addEventListener('click', () => {
+      initAudioContext();
+      vibratePattern([50]);
+      openPreflightAdjuster(JSON.parse(JSON.stringify(t)));
+    });
+    card.querySelector('.template-sched-btn').addEventListener('click', () => {
+      const sel = document.getElementById('schedule-routine-select');
+      if (sel) { sel.value = t.id; showToast(`"${t.title}" selected — pick a day & time below.`); }
+      document.getElementById('schedule-form-card')?.scrollIntoView({ behavior: 'smooth' });
+    });
+    grid.appendChild(card);
+  });
+}
+
+// Populate the routine <select> (templates + library) — refreshed when custom routines change
+function refreshScheduleRoutineOptions() {
+  const sel = document.getElementById('schedule-routine-select');
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = '';
+  const optgT = document.createElement('optgroup'); optgT.label = 'Templates';
+  ROUTINE_TEMPLATES.forEach(t => {
+    const o = document.createElement('option'); o.value = t.id; o.textContent = t.title; optgT.appendChild(o);
+  });
+  sel.appendChild(optgT);
+  const optgL = document.createElement('optgroup'); optgL.label = 'Library';
+  allRoutines().forEach(r => {
+    const o = document.createElement('option'); o.value = r.id; o.textContent = r.title; optgL.appendChild(o);
+  });
+  sel.appendChild(optgL);
+  if (prev) sel.value = prev;
+}
+
+function templateOrRoutine(id) {
+  return ROUTINE_TEMPLATES.find(t => t.id === id) || findRoutine(id);
+}
+
+function setupScheduleForm() {
+  refreshScheduleRoutineOptions();
+  const addBtn = document.getElementById('schedule-add-btn');
+  if (!addBtn) return;
+  addBtn.addEventListener('click', () => {
+    const sel = document.getElementById('schedule-routine-select');
+    const dayEl = document.getElementById('schedule-day-select');
+    const timeEl = document.getElementById('schedule-time-input');
+    const remEl = document.getElementById('schedule-reminder-check');
+    const r = templateOrRoutine(sel.value);
+    if (!r) { showToast('Pick a routine first.'); return; }
+    if (!timeEl.value) { showToast('Pick a start time.'); return; }
+    schedule.push({
+      id: 'sch_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      routineId: r.id,
+      title: r.title,
+      day: parseInt(dayEl.value),
+      time: timeEl.value,
+      reminder: remEl.checked
+    });
+    saveSchedule();
+    renderSchedule();
+    vibratePattern([50]);
+    showToast(`Scheduled "${r.title}" on ${WEEKDAYS[parseInt(dayEl.value)]} at ${timeEl.value}.`);
+  });
+}
+
+function fmtTime(hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = ((h + 11) % 12) + 1;
+  return `${h12}:${m.toString().padStart(2, '0')} ${ampm}`;
+}
+
+// Monday-anchored start of the current week
+function startOfWeek() {
+  const d = new Date(); d.setHours(0, 0, 0, 0);
+  const day = d.getDay(); // 0 Sun .. 6 Sat
+  const diff = (day === 0 ? -6 : 1 - day); // shift to Monday
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+function renderSchedule() {
+  const grid = document.getElementById('weekly-schedule-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const weekStart = startOfWeek();
+  const order = [1, 2, 3, 4, 5, 6, 0]; // Mon..Sun
+
+  order.forEach((dow, colIdx) => {
+    const colDate = new Date(weekStart); colDate.setDate(weekStart.getDate() + colIdx);
+    const dKey = dateKey(colDate);
+    const isToday = dKey === todayKey();
+
+    const col = document.createElement('div');
+    col.className = 'sched-col' + (isToday ? ' sched-col-today' : '');
+
+    const items = schedule
+      .filter(s => s.day === dow)
+      .sort((a, b) => a.time.localeCompare(b.time));
+
+    col.innerHTML = `<div class="sched-col-head">${WEEKDAYS[dow]}<span class="sched-col-date">${colDate.getDate()}</span></div>`;
+
+    if (items.length === 0) {
+      col.innerHTML += `<div class="sched-empty">—</div>`;
+    }
+
+    items.forEach(item => {
+      const doneKey = `done|${dKey}|${item.id}`;
+      const isDone = !!firedReminders[doneKey];
+      const future = colDate > new Date(new Date().setHours(23, 59, 59, 999));
+      const block = document.createElement('div');
+      block.className = 'sched-block' + (isDone ? ' sched-done' : '');
+      block.innerHTML = `
+        <div class="sched-time">${fmtTime(item.time)}${item.reminder ? ' 🔔' : ''}</div>
+        <div class="sched-title">${escapeHtml(item.title)}</div>
+        <div class="sched-actions">
+          <button class="sched-toggle" title="${isDone ? 'Mark missed' : 'Mark done'}">${isDone ? '✓ Done' : (future ? 'Upcoming' : 'Mark done')}</button>
+          <button class="sched-remove" title="Remove from schedule">✕</button>
+        </div>
+      `;
+      block.querySelector('.sched-toggle').addEventListener('click', () => {
+        if (firedReminders[doneKey]) {
+          delete firedReminders[doneKey];
+        } else {
+          firedReminders[doneKey] = true;
+          // Mark a completion for analytics/streaks
+          const r = templateOrRoutine(item.routineId);
+          if (r) {
+            completions.push({ id: r.id, title: r.title, score: r.stats.scientificScore, date: dKey, timestamp: Date.now() });
+            localStorage.setItem('routine_completions', JSON.stringify(completions));
+            recalculateAllStreaks();
+            updateTrackerUI(); updateStreakDisplay();
+          }
+          vibratePattern([60]);
+        }
+        localStorage.setItem('ra_reminder_fired', JSON.stringify(firedReminders));
+        renderSchedule();
+      });
+      block.querySelector('.sched-remove').addEventListener('click', () => {
+        schedule = schedule.filter(s => s.id !== item.id);
+        saveSchedule();
+        renderSchedule();
+      });
+      col.appendChild(block);
+    });
+
+    grid.appendChild(col);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// REMINDERS (Notification API — fires only while tab is open)
+// ---------------------------------------------------------------------------
+function setupReminderToggle() {
+  const toggle = document.getElementById('reminders-toggle');
+  const status = document.getElementById('reminders-status');
+  if (!toggle) return;
+
+  function reflect() {
+    const supported = 'Notification' in window;
+    if (!supported) {
+      toggle.checked = false; toggle.disabled = true;
+      status.textContent = 'Notifications are not supported in this browser.';
+      return;
+    }
+    toggle.checked = remindersEnabled && Notification.permission === 'granted';
+    if (Notification.permission === 'denied') {
+      status.textContent = 'Notifications are blocked in your browser settings.';
+    } else if (toggle.checked) {
+      status.textContent = 'On — reminders fire while this tab is open.';
+    } else {
+      status.textContent = 'Off — enable to get step-time reminders (this tab must stay open).';
+    }
+  }
+
+  toggle.addEventListener('change', async () => {
+    if (toggle.checked) {
+      if (!('Notification' in window)) return reflect();
+      let perm = Notification.permission;
+      if (perm === 'default') perm = await Notification.requestPermission();
+      if (perm === 'granted') {
+        remindersEnabled = true;
+        localStorage.setItem('ra_reminders_enabled', 'true');
+        showToast('Reminders enabled.');
+      } else {
+        remindersEnabled = false;
+        localStorage.setItem('ra_reminders_enabled', 'false');
+        showToast('Notification permission denied.');
+      }
+    } else {
+      remindersEnabled = false;
+      localStorage.setItem('ra_reminders_enabled', 'false');
+    }
+    reflect();
+  });
+  reflect();
+}
+
+function checkReminders() {
+  if (!remindersEnabled || !('Notification' in window) || Notification.permission !== 'granted') return;
+  const now = new Date();
+  const dow = now.getDay();
+  const dKey = todayKey();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  schedule.forEach(item => {
+    if (!item.reminder || item.day !== dow) return;
+    const [h, m] = item.time.split(':').map(Number);
+    const itemMin = h * 60 + m;
+    const key = `fired|${dKey}|${item.id}`;
+    // Fire within a 2-minute window of the scheduled time, once per day
+    if (nowMin >= itemMin && nowMin <= itemMin + 2 && !firedReminders[key]) {
+      firedReminders[key] = true;
+      localStorage.setItem('ra_reminder_fired', JSON.stringify(firedReminders));
+      try {
+        new Notification('⏰ ' + item.title, {
+          body: `Time for your ${item.title} routine.`,
+          icon: 'icon-192.png',
+          tag: item.id
+        });
+      } catch (e) { /* ignore */ }
+      vibratePattern([120, 60, 120]);
+    }
+  });
+}
+
+// ---------------------------------------------------------------------------
+// TRACKER EXTRAS: Year heatmap · Deep analytics · Today step checklist
+// ---------------------------------------------------------------------------
+function setupTrackerExtras() {
+  renderTrackerExtras();
+}
+
+function renderTrackerExtras() {
+  renderYearHeatmap();
+  renderDeepAnalytics();
+  renderTodayChecklist();
+}
+
+// GitHub-style 53-week completion heatmap (last ~12 months)
+function renderYearHeatmap() {
+  const host = document.getElementById('year-heatmap');
+  if (!host) return;
+
+  // Count completions per day
+  const counts = {};
+  completions.forEach(c => { counts[c.date] = (counts[c.date] || 0) + 1; });
+
+  // Start 52 weeks back, snapped to Sunday
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const start = new Date(today);
+  start.setDate(start.getDate() - (52 * 7) - today.getDay());
+
+  const cell = 11, gap = 2.5, cols = 53;
+  const topPad = 14, leftPad = 22;
+  const w = leftPad + cols * (cell + gap);
+  const h = topPad + 7 * (cell + gap);
+
+  let rects = '';
+  let monthLabels = '';
+  let lastMonth = -1;
+
+  for (let col = 0; col < cols; col++) {
+    for (let row = 0; row < 7; row++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + col * 7 + row);
+      if (d > today) continue;
+      const k = dateKey(d);
+      const n = counts[k] || 0;
+      let lvl = 0;
+      if (n >= 1) lvl = 1; if (n >= 2) lvl = 2; if (n >= 3) lvl = 3; if (n >= 4) lvl = 4;
+      const x = leftPad + col * (cell + gap);
+      const y = topPad + row * (cell + gap);
+      rects += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" rx="2" class="hm-cell hm-l${lvl}"><title>${k}: ${n} completion${n === 1 ? '' : 's'}</title></rect>`;
+      if (row === 0 && d.getMonth() !== lastMonth) {
+        lastMonth = d.getMonth();
+        monthLabels += `<text x="${x}" y="10" class="hm-month">${d.toLocaleDateString('en-US', { month: 'short' })}</text>`;
+      }
+    }
+  }
+
+  host.innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="100%" preserveAspectRatio="xMinYMin meet" style="min-width:680px;">${monthLabels}${rects}</svg>`;
+}
+
+// Deep analytics: completion rate, best/worst steps, most consistent weekday
+function renderDeepAnalytics() {
+  // 1) Most consistent weekday
+  const dayCounts = [0, 0, 0, 0, 0, 0, 0];
+  completions.forEach(c => {
+    const d = new Date(c.date + 'T00:00:00');
+    dayCounts[d.getDay()]++;
+  });
+  const bestDayIdx = dayCounts.indexOf(Math.max(...dayCounts));
+  const bestDayEl = document.getElementById('insight-best-day');
+  if (bestDayEl) {
+    bestDayEl.textContent = completions.length
+      ? `${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][bestDayIdx]}`
+      : '—';
+  }
+
+  // 2) 30-day completion rate (days with >=1 completion / 30)
+  const set = new Set(completions.map(c => c.date));
+  let active30 = 0;
+  for (let i = 0; i < 30; i++) {
+    const d = new Date(Date.now() - i * 86400000);
+    if (set.has(dateKey(d))) active30++;
+  }
+  const rate = Math.round((active30 / 30) * 100);
+  const rateEl = document.getElementById('insight-rate-val');
+  const rateBar = document.getElementById('insight-rate-bar');
+  if (rateEl) rateEl.textContent = `${rate}%`;
+  if (rateBar) rateBar.style.width = `${rate}%`;
+
+  // 3) Best / worst step adherence from the per-step log
+  const stepStats = {}; // "routineId::stepTitle" -> {done, total, title}
+  Object.keys(stepLog).forEach(dk => {
+    const dayMap = stepLog[dk];
+    Object.keys(dayMap).forEach(rid => {
+      const r = templateOrRoutine(rid);
+      if (!r) return;
+      dayMap[rid].forEach((checked, i) => {
+        const st = r.steps[i];
+        if (!st) return;
+        const key = rid + '::' + i;
+        if (!stepStats[key]) stepStats[key] = { done: 0, total: 0, title: st.title };
+        stepStats[key].total++;
+        if (checked) stepStats[key].done++;
+      });
+    });
+  });
+
+  const ranked = Object.values(stepStats)
+    .filter(s => s.total >= 1)
+    .map(s => ({ ...s, pct: Math.round((s.done / s.total) * 100) }))
+    .sort((a, b) => b.pct - a.pct);
+
+  const bestEl = document.getElementById('insight-best-step');
+  const worstEl = document.getElementById('insight-worst-step');
+  if (bestEl && worstEl) {
+    if (ranked.length === 0) {
+      bestEl.textContent = 'No step data yet';
+      worstEl.textContent = 'Check off steps below to build insights';
+    } else {
+      const best = ranked[0], worst = ranked[ranked.length - 1];
+      bestEl.textContent = `${best.title} (${best.pct}%)`;
+      worstEl.textContent = `${worst.title} (${worst.pct}%)`;
+    }
+  }
+
+  // 4) 14-day completion-rate sparkline (divs)
+  const spark = document.getElementById('insight-sparkline');
+  if (spark) {
+    spark.innerHTML = '';
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 86400000);
+      const n = completions.filter(c => c.date === dateKey(d)).length;
+      const bar = document.createElement('div');
+      bar.className = 'spark-bar';
+      bar.style.height = `${Math.min(100, 18 + n * 28)}%`;
+      bar.style.opacity = n ? '1' : '0.25';
+      bar.title = `${dateKey(d)}: ${n}`;
+      spark.appendChild(bar);
+    }
+  }
+}
+
+// Today's scheduled routines → per-step checklist
+function renderTodayChecklist() {
+  const host = document.getElementById('today-step-checklist');
+  if (!host) return;
+  host.innerHTML = '';
+
+  const dow = new Date().getDay();
+  const dKey = todayKey();
+  const todays = schedule.filter(s => s.day === dow).sort((a, b) => a.time.localeCompare(b.time));
+
+  if (todays.length === 0) {
+    host.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem; text-align:center; padding:1.5rem 0;">No routines scheduled for today. Add some in the <strong>Plan</strong> tab to check off steps here.</p>';
+    return;
+  }
+
+  todays.forEach(item => {
+    const r = templateOrRoutine(item.routineId);
+    if (!r) return;
+    if (!stepLog[dKey]) stepLog[dKey] = {};
+    if (!stepLog[dKey][r.id]) stepLog[dKey][r.id] = r.steps.map(() => false);
+    const checks = stepLog[dKey][r.id];
+
+    const block = document.createElement('div');
+    block.className = 'today-routine';
+    const doneCount = checks.filter(Boolean).length;
+    block.innerHTML = `
+      <div class="today-routine-head">
+        <span>${escapeHtml(r.title)} <span style="color:var(--text-muted); font-weight:500;">· ${fmtTime(item.time)}</span></span>
+        <span class="today-progress">${doneCount}/${r.steps.length}</span>
+      </div>
+    `;
+    r.steps.forEach((st, i) => {
+      const row = document.createElement('label');
+      row.className = 'today-step' + (checks[i] ? ' checked' : '');
+      row.innerHTML = `
+        <input type="checkbox" ${checks[i] ? 'checked' : ''}>
+        <span class="today-step-box">✓</span>
+        <span class="today-step-text">${escapeHtml(st.title)} <span style="color:var(--text-muted);">(${st.duration}m)</span></span>
+      `;
+      row.querySelector('input').addEventListener('change', (e) => {
+        checks[i] = e.target.checked;
+        saveStepLog();
+        vibratePattern([35]);
+        // If every step done, log a completion for the day (once)
+        const allDone = checks.every(Boolean);
+        const doneKey = `done|${dKey}|${item.id}`;
+        if (allDone && !firedReminders[doneKey]) {
+          firedReminders[doneKey] = true;
+          localStorage.setItem('ra_reminder_fired', JSON.stringify(firedReminders));
+          completions.push({ id: r.id, title: r.title, score: r.stats.scientificScore, date: dKey, timestamp: Date.now() });
+          localStorage.setItem('routine_completions', JSON.stringify(completions));
+          recalculateAllStreaks();
+          updateStreakDisplay();
+          showToast(`All steps done — "${r.title}" logged! 🔥`);
+        }
+        updateTrackerUI();
+      });
+      block.appendChild(row);
+    });
+    host.appendChild(block);
+  });
 }
